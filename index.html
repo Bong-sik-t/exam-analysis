@@ -51,14 +51,13 @@
   .section.active { display: block; }
 
   /* ===== HOME ===== */
-  #home {
+  #home.active {
     min-height: 100vh;
     background: linear-gradient(135deg, #1e3a8a 0%, #3B82F6 50%, #06b6d4 100%);
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  #home.active { display: flex; }
   .home-container {
     text-align: center;
     color: white;
@@ -936,6 +935,26 @@
   </div>
 </section>
 
+<!-- ============== SECTION: ADMIN LOGIN ============== -->
+<section id="admin-login" class="section">
+  <div style="min-height:100vh;background:linear-gradient(135deg,#1e3a8a 0%,#4f46e5 100%);display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div class="login-card">
+      <div style="font-size:32px;margin-bottom:12px;">🔧</div>
+      <div class="login-title">관리자 모드</div>
+      <div class="login-subtitle">관리자 비밀번호를 입력하세요</div>
+      <div class="login-form">
+        <div class="input-group">
+          <label class="input-label">비밀번호</label>
+          <input type="password" class="input-field" id="admin-pw-input" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter') handleAdminLogin()">
+        </div>
+        <div class="login-error" id="admin-login-error"></div>
+        <button class="login-btn" style="background:#4f46e5;" onclick="handleAdminLogin()">입장</button>
+      </div>
+      <div class="login-back"><a onclick="showSection('home')">← 홈으로 돌아가기</a></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============== SECTION 2: TEACHER MODE ============== -->
 <section id="teacher" class="section">
   <div class="app-header">
@@ -949,6 +968,19 @@
     </div>
   </div>
   <div class="page-content">
+    <!-- Admin Password Change -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🔑 관리자 비밀번호 변경</div>
+      </div>
+      <div style="padding:0 20px 20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="password" class="form-control" id="admin-pw-new" placeholder="새 비밀번호" style="max-width:200px;">
+        <input type="password" class="form-control" id="admin-pw-confirm" placeholder="비밀번호 확인" style="max-width:200px;">
+        <button class="btn btn-primary btn-sm" onclick="changeAdminPassword()">변경</button>
+        <span id="admin-pw-status" style="font-size:13px;"></span>
+      </div>
+    </div>
+
     <!-- Exam Config -->
     <div class="card">
       <div class="card-header">
@@ -1462,6 +1494,7 @@ let state = {
   settings: {
     gasUrl: '', // 교사가 입력한 GAS 웹앱 URL
   },
+  adminPassword: '1234',
   numClasses: 7,
   teachers: [],   // [{classNum:1, name:'', password:''}]
   pdfUrls: {},    // {subject: objectURL} - session memory
@@ -1503,6 +1536,40 @@ function showSection(id) {
 }
 
 function showAdmin() {
+  // Show admin login screen first
+  document.getElementById('admin-pw-input').value = '';
+  document.getElementById('admin-login-error').classList.remove('show');
+  showSection('admin-login');
+}
+
+function changeAdminPassword() {
+  const newPw = document.getElementById('admin-pw-new').value.trim();
+  const confirm = document.getElementById('admin-pw-confirm').value.trim();
+  const status = document.getElementById('admin-pw-status');
+  if (!newPw) { status.textContent = '새 비밀번호를 입력하세요.'; status.style.color = 'var(--danger)'; return; }
+  if (newPw !== confirm) { status.textContent = '비밀번호가 일치하지 않습니다.'; status.style.color = 'var(--danger)'; return; }
+  state.adminPassword = newPw;
+  saveToStorage();
+  document.getElementById('admin-pw-new').value = '';
+  document.getElementById('admin-pw-confirm').value = '';
+  status.textContent = '✅ 변경됨';
+  status.style.color = 'var(--success)';
+  setTimeout(() => { status.textContent = ''; }, 2500);
+}
+
+function handleAdminLogin() {
+  const pw = document.getElementById('admin-pw-input').value.trim();
+  const errEl = document.getElementById('admin-login-error');
+  if (pw !== state.adminPassword) {
+    errEl.textContent = '비밀번호가 틀렸습니다.';
+    errEl.classList.add('show');
+    return;
+  }
+  errEl.classList.remove('show');
+  showAdminDash();
+}
+
+function showAdminDash() {
   showSection('teacher');  // keep id=teacher for the admin section
   renderStudentTable(state.students);
   updateExamInfo();
@@ -1513,7 +1580,7 @@ function showAdmin() {
   renderTeacherConfigGrid();
 }
 // Keep showTeacher as alias
-function showTeacher() { showAdmin(); }
+function showTeacher() { showAdminDash(); }
 
 function showTeacherLogin() {
   populateTeacherSelect();
@@ -1700,9 +1767,9 @@ function parseExcel(workbook) {
   const sheetNames = workbook.SheetNames;
   console.log('Sheets:', sheetNames);
 
-  // Parse 성적표 sheet (index 7)
-  const scoreSheetName = sheetNames[7];
-  if (!scoreSheetName) throw new Error('성적표 시트를 찾을 수 없습니다 (index 7 없음)');
+  // Parse 성적표 sheet (index 6)
+  const scoreSheetName = sheetNames[6];
+  if (!scoreSheetName) throw new Error('성적표 시트를 찾을 수 없습니다 (index 6 없음)');
   const scoreSheet = workbook.Sheets[scoreSheetName];
   const scoreData = XLSX.utils.sheet_to_json(scoreSheet, { header: 1, defval: '' });
 
@@ -1738,12 +1805,12 @@ function parseExcel(workbook) {
   state.studentAnswers = {};
 
   const subjectSheetMap = {
-    '국어':   sheetNames[8],
-    '수학':   sheetNames[9],
-    '영어':   sheetNames[10],
-    '한국사': sheetNames[11],
-    '사탐':   sheetNames[12],
-    '과탐':   sheetNames[13],
+    '국어':   sheetNames[7],
+    '수학':   sheetNames[8],
+    '영어':   sheetNames[9],
+    '한국사': sheetNames[10],
+    '사탐':   sheetNames[11],
+    '과탐':   sheetNames[12],
   };
 
   for (const [subject, sheetName] of Object.entries(subjectSheetMap)) {
@@ -1755,17 +1822,17 @@ function parseExcel(workbook) {
     const cfg = SUBJECT_CONFIG[subject];
     const qCount = cfg.questions;
 
-    // Row index 12 = correct answers; answers start at col index 6
-    const answerRow = sData[12] || [];
+    // Row index 13 = correct answers; answers start at col index 6
+    const answerRow = sData[13] || [];
     const correctArr = [];
     for (let q = 0; q < qCount; q++) {
       correctArr.push(safeStr(answerRow[6 + q]));
     }
     state.correctAnswers[subject] = correctArr;
 
-    // Student rows start at index 14
+    // Student rows start at index 15
     if (!state.studentAnswers[subject]) state.studentAnswers[subject] = {};
-    for (let i = 14; i < sData.length; i++) {
+    for (let i = 15; i < sData.length; i++) {
       const row = sData[i];
       if (!row) continue;
       const code = safeStr(row[3]);
@@ -2999,6 +3066,7 @@ function saveToStorage() {
       settings: state.settings,
       numClasses: state.numClasses,
       teachers: state.teachers,
+      adminPassword: state.adminPassword,
     };
     localStorage.setItem('examAnalysisState', JSON.stringify(toSave));
   } catch(e) {
@@ -3021,6 +3089,7 @@ function loadFromStorage() {
     if (data.settings)        state.settings        = { ...state.settings, ...data.settings };
     if (data.numClasses)      state.numClasses      = data.numClasses;
     if (data.teachers)        state.teachers        = data.teachers;
+    if (data.adminPassword)   state.adminPassword   = data.adminPassword;
     // Sync UI
     if (data.examInfo) {
       setTimeout(() => {
