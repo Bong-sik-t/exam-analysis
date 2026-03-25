@@ -2043,11 +2043,10 @@ function handleStudentLogin() {
 
   // Check password
   let correctPw = state.defaultPassword;
-  // 4자리 학번으로 생년월일 조회
-  if (state.birthdateMode === 'file' && state.birthdates[code]) {
-    correctPw = state.birthdates[code];
-  } else if (state.birthdateMode === 'file' && state.birthdates[studentCode]) {
-    correctPw = state.birthdates[studentCode];
+  // 4자리 학번 또는 5자리 코드로 생년월일 조회 (file/inline 모드 모두)
+  if (state.birthdateMode !== 'default') {
+    const bd = state.birthdates[code] || state.birthdates[studentCode];
+    if (bd) correctPw = bd;
   }
   if (pw !== correctPw) {
     errEl.textContent = '비밀번호가 일치하지 않습니다. 생년월일 6자리를 입력하세요. (예: 080315)';
