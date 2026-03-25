@@ -1821,17 +1821,17 @@ function parseExcel(workbook) {
     const cfg = SUBJECT_CONFIG[subject];
     const qCount = cfg.questions;
 
-    // Row index 13 = correct answers; answers start at col index 6
-    const answerRow = sData[13] || [];
+    // Row index 12 = correct answers; answers start at col index 6
+    const answerRow = sData[12] || [];
     const correctArr = [];
     for (let q = 0; q < qCount; q++) {
       correctArr.push(safeStr(answerRow[6 + q]));
     }
     state.correctAnswers[subject] = correctArr;
 
-    // Student rows start at index 15
+    // Student rows start at index 14
     if (!state.studentAnswers[subject]) state.studentAnswers[subject] = {};
-    for (let i = 15; i < sData.length; i++) {
+    for (let i = 14; i < sData.length; i++) {
       const row = sData[i];
       if (!row) continue;
       const code = safeStr(row[3]);
