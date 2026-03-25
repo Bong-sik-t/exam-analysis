@@ -2977,11 +2977,13 @@ function renderWrongAnswers(student, subject) {
       <div class="q-circles">
   `;
 
+  const hasPdf = !!state.pdfUrls[subject];
   for (const q of qResults) {
     const cls = q.status === 'correct' ? 'q-correct' : q.status === 'wrong' ? 'q-wrong' : 'q-nodata';
     const shortLabel = q.isShortAnswer ? '<span class="q-label-short">단답형</span>' : '';
+    const clickable = hasPdf ? `onclick="openPdfViewer('${subject}')" style="cursor:pointer;" title="Q${q.num}: 정답=${q.correct}, 내답=${q.student} (클릭하면 문제지 열기)"` : `title="Q${q.num}: 정답=${q.correct}, 내답=${q.student}"`;
     html += `
-      <div class="q-circle ${cls}" title="Q${q.num}: 정답=${q.correct}, 내답=${q.student}">
+      <div class="q-circle ${cls}" ${clickable}>
         ${q.num}
         ${shortLabel}
       </div>
