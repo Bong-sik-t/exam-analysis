@@ -2627,8 +2627,11 @@ function getStudents() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   if (!sheet || sheet.getLastRow() === 0) return json({students:[], message:'데이터 없음'});
-  const val = sheet.getRange(1,1).getValue();
-  return ContentService.createTextOutput(val || '{}')
+  // 여러 행에 나눠 저장된 데이터를 합쳐서 반환
+  const rows = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  const jsonStr = rows.map(r => r[0]).join('');
+  if (!jsonStr) return json({students:[], message:'데이터 없음'});
+  return ContentService.createTextOutput(jsonStr)
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -2637,8 +2640,15 @@ function saveStudents(data) {
   let sheet = ss.getSheetByName(SHEET_STUDENTS);
   if (!sheet) sheet = ss.insertSheet(SHEET_STUDENTS);
   sheet.clearContents();
-  sheet.getRange(1,1).setValue(JSON.stringify(data));
-  return json({success:true, count:(data.students||[]).length});
+  // 셀 한도(50,000자) 초과 방지: 45,000자씩 여러 행에 나눠 저장
+  const jsonStr = JSON.stringify(data);
+  const chunkSize = 45000;
+  const chunks = [];
+  for (let i = 0; i < jsonStr.length; i += chunkSize) {
+    chunks.push([jsonStr.slice(i, i + chunkSize)]);
+  }
+  sheet.getRange(1, 1, chunks.length, 1).setValues(chunks);
+  return json({success:true, count:(data.students||[]).length, chunks:chunks.length});
 }
 
 function getGradeCuts(e) {
