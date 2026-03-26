@@ -1051,14 +1051,23 @@
             <button class="btn btn-secondary btn-sm" onclick="loadFromGoogleSheets()">🔄 구글시트에서 불러오기</button>
           </div>
           <div id="sync-status" style="margin-top:6px;font-size:13px;"></div>
-          <!-- Student link -->
-          <div id="student-link-area" style="display:none;margin-top:12px;padding:12px;background:var(--primary-light);border-radius:8px;">
-            <div style="font-size:13px;font-weight:600;color:var(--primary-dark);margin-bottom:6px;">🔗 학생용 접속 링크</div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <input type="text" id="student-link-input" readonly style="flex:1;min-width:200px;font-size:12px;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;background:white;">
-              <button class="btn btn-primary btn-sm" onclick="copyStudentLink()">복사</button>
+          <!-- 링크 공유 -->
+          <div id="student-link-area" style="display:none;margin-top:12px;display:none;flex-direction:column;gap:10px;">
+            <div style="padding:12px;background:#EFF6FF;border-radius:8px;border:1px solid #BFDBFE;">
+              <div style="font-size:13px;font-weight:600;color:#1D4ED8;margin-bottom:6px;">👤 학생용 링크 — 학생들에게 공유</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input type="text" id="student-link-input" readonly style="flex:1;min-width:200px;font-size:12px;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;background:white;">
+                <button class="btn btn-primary btn-sm" onclick="copyStudentLink()">복사</button>
+              </div>
             </div>
-            <div style="font-size:12px;color:var(--gray-500);margin-top:6px;">이 링크를 학생들에게 공유하면 어떤 기기에서도 자신의 성적을 조회할 수 있습니다.</div>
+            <div style="padding:12px;background:#F0FDF4;border-radius:8px;border:1px solid #BBF7D0;">
+              <div style="font-size:13px;font-weight:600;color:#15803D;margin-bottom:6px;">🏫 담임교사용 링크 — 각 반 담임선생님께 공유</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input type="text" id="teacher-link-input" readonly style="flex:1;min-width:200px;font-size:12px;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;background:white;">
+                <button class="btn btn-sm" style="background:#16A34A;color:white;" onclick="copyTeacherLink()">복사</button>
+              </div>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">담임선생님이 이 링크로 접속하면 교사 로그인 후 본인 반 학생 성적을 확인할 수 있습니다.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1228,6 +1237,7 @@
         </table>
       </div>
     </div>
+
   </div>
 </section>
 
@@ -2567,19 +2577,27 @@ async function loadFromGoogleSheets(isLoginMode = false) {
 function generateStudentLink() {
   if (!state.settings.gasUrl) return;
   const base = window.location.href.split('?')[0];
-  const link = `${base}?gas=${encodeURIComponent(state.settings.gasUrl)}`;
+  const gasEnc = encodeURIComponent(state.settings.gasUrl);
   const linkArea = document.getElementById('student-link-area');
-  const linkInput = document.getElementById('student-link-input');
-  if (linkArea && linkInput) {
-    linkInput.value = link;
-    linkArea.style.display = 'block';
+  const studentInput = document.getElementById('student-link-input');
+  const teacherInput = document.getElementById('teacher-link-input');
+  if (linkArea) {
+    if (studentInput) studentInput.value = `${base}?gas=${gasEnc}`;
+    if (teacherInput) teacherInput.value = `${base}?gas=${gasEnc}&role=teacher`;
+    linkArea.style.display = 'flex';
   }
 }
 
 function copyStudentLink() {
   const input = document.getElementById('student-link-input');
   if (!input || !input.value) return;
-  navigator.clipboard.writeText(input.value).then(() => showToast('링크 복사됨!', 'success'));
+  navigator.clipboard.writeText(input.value).then(() => showToast('학생용 링크 복사됨!', 'success'));
+}
+
+function copyTeacherLink() {
+  const input = document.getElementById('teacher-link-input');
+  if (!input || !input.value) return;
+  navigator.clipboard.writeText(input.value).then(() => showToast('담임교사용 링크 복사됨!', 'success'));
 }
 
 const GAS_SCRIPT_CODE = `// =============================================
