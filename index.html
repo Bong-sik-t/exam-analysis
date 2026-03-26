@@ -1274,11 +1274,20 @@
     <div style="background:linear-gradient(135deg,#064e3b,#059669);color:white;border-radius:var(--radius);padding:20px 24px;box-shadow:var(--shadow-lg);">
       <div style="font-size:22px;font-weight:800;margin-bottom:4px;" id="teacher-dash-title">X반 교사 대시보드</div>
       <div style="font-size:14px;opacity:0.85;" id="teacher-dash-meta"></div>
-      <div id="teacher-student-link-wrap" style="display:none;margin-top:14px;background:rgba(255,255,255,0.15);border-radius:8px;padding:12px 14px;">
-        <div style="font-size:12px;margin-bottom:8px;opacity:0.9;">📎 학생용 링크 — 우리 반 학생들에게 공유하세요</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="teacher-student-link-input" readonly style="flex:1;min-width:0;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;padding:6px 10px;color:white;font-size:12px;outline:none;">
-          <button onclick="copyTeacherStudentLink()" style="background:white;color:#059669;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">복사</button>
+      <div id="teacher-student-link-wrap" style="display:none;margin-top:14px;background:rgba(255,255,255,0.15);border-radius:8px;padding:12px 14px;display:none;flex-direction:column;gap:10px;">
+        <div>
+          <div style="font-size:12px;margin-bottom:6px;opacity:0.9;">👤 학생용 링크</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="teacher-student-link-input" readonly style="flex:1;min-width:0;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;padding:6px 10px;color:white;font-size:12px;outline:none;">
+            <button onclick="copyTeacherStudentLink('student')" style="background:white;color:#059669;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">복사</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;margin-bottom:6px;opacity:0.9;">🏫 담임교사용 링크 (다른 담임선생님과 공유)</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="teacher-teacher-link-input" readonly style="flex:1;min-width:0;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;padding:6px 10px;color:white;font-size:12px;outline:none;">
+            <button onclick="copyTeacherStudentLink('teacher')" style="background:white;color:#059669;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">복사</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1532,12 +1541,14 @@ window.addEventListener('load', () => {
     if (el) el.style.display = 'block';
     autoLoadFromGas();
   }
-  // ?gas= 링크로 접속한 경우 → 학생용 화면 (관리자/교사 버튼 숨김)
+  // ?gas= 링크로 접속한 경우 → 관리자 버튼 숨김
+  // role=teacher 이면 교사 로그인은 보여줌, 없으면 학생만
   if (gasParam) {
+    const role = params.get('role');
     const adminBtn = document.getElementById('btn-admin');
     const teacherBtn = document.getElementById('btn-teacher');
     if (adminBtn) adminBtn.style.display = 'none';
-    if (teacherBtn) teacherBtn.style.display = 'none';
+    if (teacherBtn && role !== 'teacher') teacherBtn.style.display = 'none';
   }
   showSection('home');
 });
@@ -1636,23 +1647,28 @@ function showTeacherDash() {
   const t = state.currentTeacher;
   document.getElementById('teacher-dash-title').textContent = `${t.classNum}반 담임 교사`;
   document.getElementById('teacher-dash-meta').textContent = `${t.name ? t.name + ' 선생님 • ' : ''}${state.examInfo.year}학년도 ${state.examInfo.exam} 모의고사`;
-  // 학생용 링크 표시
+  // 링크 표시
   const linkWrap = document.getElementById('teacher-student-link-wrap');
-  const linkInput = document.getElementById('teacher-student-link-input');
-  if (state.settings.gasUrl && linkWrap && linkInput) {
+  const studentInput = document.getElementById('teacher-student-link-input');
+  const teacherInput = document.getElementById('teacher-teacher-link-input');
+  if (state.settings.gasUrl && linkWrap) {
     const base = window.location.href.split('?')[0];
-    linkInput.value = `${base}?gas=${encodeURIComponent(state.settings.gasUrl)}`;
-    linkWrap.style.display = 'block';
+    const gasEnc = encodeURIComponent(state.settings.gasUrl);
+    if (studentInput) studentInput.value = `${base}?gas=${gasEnc}`;
+    if (teacherInput) teacherInput.value = `${base}?gas=${gasEnc}&role=teacher`;
+    linkWrap.style.display = 'flex';
   }
   renderTeacherClassStats();
   renderTeacherStudentTable();
   showSection('teacher-dash');
 }
 
-function copyTeacherStudentLink() {
-  const input = document.getElementById('teacher-student-link-input');
+function copyTeacherStudentLink(role = 'student') {
+  const id = role === 'teacher' ? 'teacher-teacher-link-input' : 'teacher-student-link-input';
+  const input = document.getElementById(id);
   if (!input || !input.value) { showToast('링크가 없습니다. GAS URL을 먼저 설정하세요.', 'error'); return; }
-  navigator.clipboard.writeText(input.value).then(() => showToast('학생용 링크가 복사되었습니다!', 'success'));
+  const label = role === 'teacher' ? '담임교사용' : '학생용';
+  navigator.clipboard.writeText(input.value).then(() => showToast(`${label} 링크가 복사되었습니다!`, 'success'));
 }
 
 function renderTeacherClassStats() {
