@@ -2117,12 +2117,15 @@ function handleBirthdateFile(e) {
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (!row[0]) continue;
-        state.birthdates[safeStr(row[0])] = safeStr(row[1]);
+        const bd = safeStr(row[1]);
+        if (bd) state.birthdates[safeStr(row[0])] = bd;
         count++;
       }
+      state.birthdateMode = 'file'; // 파일 업로드 시 자동으로 file 모드로 전환
+      switchBdTab('file');
       saveToStorage();
       updateBdSummaryBadge();
-      document.getElementById('birthdate-file-status').textContent = `✅ ${count}명 생년월일 로드됨`;
+      document.getElementById('birthdate-file-status').textContent = `✅ ${count}명 생년월일 로드됨 (비밀번호 모드: 생년월일)`;
     } catch(err) {
       document.getElementById('birthdate-file-status').textContent = '❌ 파일 오류: ' + err.message;
     }
@@ -2898,7 +2901,7 @@ async function autoLoadFromGas() {
       state.studentAnswers  = json.studentAnswers || {};
       state.birthdates      = json.birthdates || {};
       state.defaultPassword = json.defaultPassword || '000000';
-      state.birthdateMode   = json.birthdateMode || 'default';
+      state.birthdateMode   = json.birthdateMode || (Object.keys(json.birthdates||{}).length > 0 ? 'file' : 'default');
       state.examInfo        = json.examInfo || state.examInfo;
       if (json.teachers && json.teachers.length > 0) state.teachers = json.teachers;
       if (json.numClasses) state.numClasses = json.numClasses;
