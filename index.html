@@ -930,6 +930,7 @@
         학생 로그인
       </button>
     </div>
+    <div id="home-gas-notice" style="display:none;margin-top:16px;background:rgba(255,255,255,0.15);border-radius:8px;padding:8px 16px;font-size:14px;color:white;"></div>
     <div class="home-footer">Excel 성적 파일 업로드 • 과목별 틀린 문항 시각화 • 학생 개인 조회</div>
   </div>
 </section>
@@ -1518,10 +1519,11 @@ window.addEventListener('load', () => {
     state.settings.gasUrl = decodeURIComponent(gasParam);
     saveToStorage();
   }
-  // GAS URL이 있으면 학생 로그인에 불러오기 버튼 표시
+  // GAS URL이 있으면 자동으로 데이터 불러오기
   if (state.settings.gasUrl) {
     const el = document.getElementById('login-gas-load');
     if (el) el.style.display = 'block';
+    autoLoadFromGas();
   }
   showSection('home');
 });
@@ -2448,6 +2450,33 @@ async function saveToGoogleSheets() {
     }
   } catch(e) {
     statusEl.innerHTML = `<span style="color:var(--danger);">❌ 오류: ${e.message}</span>`;
+  }
+}
+
+async function autoLoadFromGas() {
+  const url = state.settings.gasUrl;
+  if (!url) return;
+  try {
+    const resp = await fetch(url + '?action=getStudents', { mode: 'cors' });
+    const json = await resp.json();
+    if (json.students && json.students.length > 0) {
+      state.students        = json.students;
+      state.correctAnswers  = json.correctAnswers || {};
+      state.studentAnswers  = json.studentAnswers || {};
+      state.birthdates      = json.birthdates || {};
+      state.defaultPassword = json.defaultPassword || '000000';
+      state.birthdateMode   = json.birthdateMode || 'default';
+      state.examInfo        = json.examInfo || state.examInfo;
+      saveToStorage();
+      // 홈 화면에 로드 완료 표시
+      const notice = document.getElementById('home-gas-notice');
+      if (notice) {
+        notice.textContent = `✅ ${json.students.length}명 데이터 로드됨`;
+        notice.style.display = 'block';
+      }
+    }
+  } catch(e) {
+    // 자동 로드 실패는 조용히 무시 (학생이 직접 버튼 누를 수 있음)
   }
 }
 
