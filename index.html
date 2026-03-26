@@ -1614,6 +1614,7 @@ function showAdminDash() {
   if (state.students.length > 0) document.getElementById('sync-buttons').style.display = 'block';
   applyNumClasses();
   renderTeacherConfigGrid();
+  generateStudentLink(); // GAS URL 있으면 링크 바로 표시
 }
 // Keep showTeacher as alias
 function showTeacher() { showAdminDash(); }
