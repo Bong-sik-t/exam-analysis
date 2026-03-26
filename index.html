@@ -2477,6 +2477,8 @@ async function saveToGoogleSheets() {
       defaultPassword: state.defaultPassword,
       birthdateMode: state.birthdateMode,
       examInfo: state.examInfo,
+      teachers: state.teachers,
+      numClasses: state.numClasses,
     };
     const resp = await fetch(url, {
       method: 'POST',
@@ -2515,6 +2517,8 @@ async function autoLoadFromGas() {
       state.defaultPassword = json.defaultPassword || '000000';
       state.birthdateMode   = json.birthdateMode || 'default';
       state.examInfo        = json.examInfo || state.examInfo;
+      if (json.teachers && json.teachers.length > 0) state.teachers = json.teachers;
+      if (json.numClasses) state.numClasses = json.numClasses;
       saveToStorage();
       if (notice) { notice.textContent = `✅ ${json.students.length}명 데이터 로드됨`; }
     } else {
