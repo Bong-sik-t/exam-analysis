@@ -6,6 +6,7 @@
 <title>2026학년도 모의고사 성적 분석</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   :root {
     --primary: #3B82F6;
@@ -1159,6 +1160,19 @@
       <input type="file" id="pdf-file-input" accept=".pdf" style="display:none" onchange="handlePdfUpload(event)">
     </div>
 
+    <!-- 해설 PDF 공유 설정 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🌐 해설 PDF 공유 설정 <span style="font-size:12px;font-weight:400;color:var(--success);">(모든 기기에서 공유됨)</span></div>
+        <span style="font-size:12px;color:var(--gray-400);">Google Drive 업로드 → 공유 → "링크가 있는 모든 사용자" 뷰어 → 링크 복사</span>
+      </div>
+      <div style="padding:16px 20px;">
+        <div id="pdf-share-config-grid" style="display:flex;flex-direction:column;gap:12px;"></div>
+        <button class="btn btn-primary btn-sm" style="margin-top:14px;" onclick="savePdfShareConfig()">💾 저장 및 구글시트 반영</button>
+        <span id="pdf-share-save-status" style="font-size:12px;margin-left:10px;"></span>
+      </div>
+    </div>
+
     <!-- Teacher Config -->
     <div class="card">
       <div class="card-header">
@@ -1516,9 +1530,22 @@
       <button class="qstats-close" onclick="closeQStats()">✕</button>
     </div>
     <div class="qstats-info-row" id="qstats-badges"></div>
+    <!-- PDF 페이지 렌더링 영역 -->
+    <div id="qstats-pdf-container" style="display:none;margin-bottom:14px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;">
+      <div id="qstats-pdf-header" style="background:#1e293b;color:white;padding:7px 12px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;">
+        <span id="qstats-pdf-header-text"></span>
+        <span id="qstats-pdf-spinner" style="display:none;">⏳</span>
+      </div>
+      <canvas id="qstats-pdf-canvas" style="width:100%;display:none;"></canvas>
+      <div id="qstats-pdf-fallback" style="display:none;">
+        <iframe id="qstats-pdf-iframe" style="width:100%;height:320px;border:none;"></iframe>
+      </div>
+      <div id="qstats-pdf-error" style="display:none;padding:12px;font-size:12px;color:#ef4444;text-align:center;"></div>
+    </div>
+
     <div class="qstats-dist-title">선지별 응답 분포</div>
     <div id="qstats-bars"></div>
-    <button class="qstats-pdf-btn" id="qstats-pdf-btn" style="display:none" onclick="openPdfViewer(window._qstatSubject)">📄 문제지에서 확인하기</button>
+    <button class="qstats-pdf-btn" id="qstats-pdf-btn" style="display:none" onclick="openPdfViewer(window._qstatSubject)">📄 문제지 전체 보기</button>
   </div>
 </div>
 
@@ -1578,6 +1605,8 @@ let state = {
   currentSubject: '국어',
   settings: {
     gasUrl: '', // 교사가 입력한 GAS 웹앱 URL
+    subjectPdfUrls: {},   // {국어:'https://drive.google.com/...', ...}
+    pdfPageConfig: {},    // {국어:{startPage:1, qPerPage:3}, ...}
   },
   adminPassword: '1234',
   numClasses: 7,
@@ -1673,6 +1702,7 @@ function showAdminDash() {
   if (state.students.length > 0) document.getElementById('sync-buttons').style.display = 'block';
   applyNumClasses();
   renderTeacherConfigGrid();
+  renderPdfShareConfigGrid();
   generateStudentLink(); // GAS URL 있으면 링크 바로 표시
 }
 // Keep showTeacher as alias
@@ -2577,11 +2607,184 @@ function showQStats(subject, qNum, myAnswer) {
     barsEl.innerHTML = html;
   }
 
-  // PDF 버튼
+  // PDF 버튼 (전체 보기용)
   const pdfBtn = document.getElementById('qstats-pdf-btn');
   pdfBtn.style.display = state.pdfUrls && state.pdfUrls[subject] ? 'block' : 'none';
 
   document.getElementById('qstats-modal').classList.add('open');
+
+  // PDF 페이지 렌더링 (비동기)
+  renderQPdfPage(subject, qNum);
+}
+
+// ============================================================
+// PDF 페이지 인라인 렌더링
+// ============================================================
+function extractDriveId(url) {
+  if (!url) return null;
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+function toDriveDownloadUrl(url) {
+  const id = extractDriveId(url);
+  return id ? `https://drive.google.com/uc?export=download&id=${id}` : url;
+}
+
+async function renderQPdfPage(subject, qNum) {
+  const container  = document.getElementById('qstats-pdf-container');
+  const headerText = document.getElementById('qstats-pdf-header-text');
+  const spinner    = document.getElementById('qstats-pdf-spinner');
+  const canvas     = document.getElementById('qstats-pdf-canvas');
+  const fallback   = document.getElementById('qstats-pdf-fallback');
+  const iframe     = document.getElementById('qstats-pdf-iframe');
+  const errEl      = document.getElementById('qstats-pdf-error');
+
+  // 초기화
+  container.style.display = 'none';
+  canvas.style.display = 'none';
+  fallback.style.display = 'none';
+  errEl.style.display = 'none';
+  iframe.src = '';
+
+  const cfg       = ((state.settings || {}).pdfPageConfig || {})[subject] || {};
+  const publicUrl = ((state.settings || {}).subjectPdfUrls || {})[subject] || '';
+  const localUrl  = (state.pdfUrls || {})[subject] || '';
+
+  if (!publicUrl && !localUrl) return; // PDF 없으면 숨김 유지
+
+  const startPage = parseInt(cfg.startPage) || 1;
+  const qPerPage  = parseInt(cfg.qPerPage)  || 2;
+  const pageNum   = startPage + Math.floor((qNum - 1) / qPerPage);
+
+  container.style.display = 'block';
+  headerText.textContent  = `${subject} ${qNum}번 — 페이지 로딩 중...`;
+  spinner.style.display   = 'inline';
+
+  if (publicUrl && typeof pdfjsLib !== 'undefined') {
+    // PDF.js로 Google Drive 공개 PDF 렌더링
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    try {
+      const pdfUrl = toDriveDownloadUrl(publicUrl);
+      const pdf    = await pdfjsLib.getDocument({
+        url: pdfUrl,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+        cMapPacked: true,
+      }).promise;
+      const actual = Math.min(pageNum, pdf.numPages);
+      headerText.textContent = `${subject} ${qNum}번 (${actual}페이지 / 전체 ${pdf.numPages}페이지)`;
+      spinner.style.display  = 'none';
+
+      const page = await pdf.getPage(actual);
+      const cw   = container.offsetWidth - 2 || 360;
+      const vp0  = page.getViewport({scale: 1});
+      const vp   = page.getViewport({scale: cw / vp0.width});
+      canvas.width  = vp.width;
+      canvas.height = vp.height;
+      canvas.style.display = 'block';
+      await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+    } catch(e) {
+      spinner.style.display = 'none';
+      // 로컬 PDF fallback 또는 iframe
+      const driveId = extractDriveId(publicUrl);
+      if (driveId) {
+        iframe.src = `https://drive.google.com/file/d/${driveId}/preview`;
+        fallback.style.display = 'block';
+        headerText.textContent = `${subject} ${qNum}번 — 약 ${pageNum}페이지를 찾아보세요`;
+      } else {
+        errEl.textContent = 'PDF 로드 실패: ' + e.message;
+        errEl.style.display = 'block';
+      }
+    }
+  } else if (localUrl) {
+    // 로컬 IndexedDB PDF (이 기기에서만)
+    iframe.src = localUrl + '#page=' + pageNum;
+    fallback.style.display = 'block';
+    headerText.textContent = `${subject} ${qNum}번 — 약 ${pageNum}페이지 (이 기기에서만)`;
+    spinner.style.display  = 'none';
+  } else {
+    // publicUrl 있지만 PDF.js 없는 경우
+    const driveId = extractDriveId(publicUrl);
+    if (driveId) {
+      iframe.src = `https://drive.google.com/file/d/${driveId}/preview`;
+      fallback.style.display = 'block';
+      headerText.textContent = `${subject} ${qNum}번 — 약 ${pageNum}페이지를 찾아보세요`;
+    }
+    spinner.style.display = 'none';
+  }
+}
+
+// ============================================================
+// PDF 공유 설정 UI
+// ============================================================
+function renderPdfShareConfigGrid() {
+  const grid = document.getElementById('pdf-share-config-grid');
+  if (!grid) return;
+  const urls = (state.settings.subjectPdfUrls  || {});
+  const cfg  = (state.settings.pdfPageConfig   || {});
+  grid.innerHTML = SUBJECTS.map(subj => {
+    const u  = urls[subj] || '';
+    const sp = (cfg[subj] || {}).startPage || '';
+    const qp = (cfg[subj] || {}).qPerPage  || '';
+    return `
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+        <span style="font-size:13px;font-weight:700;min-width:48px;color:#1e293b;">${subj}</span>
+        <input type="text" placeholder="Google Drive 공개 링크 (https://drive.google.com/...)"
+          value="${u}" style="flex:1;min-width:200px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;"
+          oninput="setPdfShareUrl('${subj}', this.value)">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="number" placeholder="시작 페이지" value="${sp}" min="1" style="width:80px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center;"
+            oninput="setPdfPageCfg('${subj}','startPage',this.value)">
+          <span style="font-size:11px;color:#94a3b8;">페이지부터</span>
+          <input type="number" placeholder="문항/페이지" value="${qp}" min="1" style="width:80px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center;"
+            oninput="setPdfPageCfg('${subj}','qPerPage',this.value)">
+          <span style="font-size:11px;color:#94a3b8;">문항/페이지</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function setPdfShareUrl(subj, val) {
+  if (!state.settings.subjectPdfUrls) state.settings.subjectPdfUrls = {};
+  state.settings.subjectPdfUrls[subj] = val.trim();
+}
+function setPdfPageCfg(subj, key, val) {
+  if (!state.settings.pdfPageConfig) state.settings.pdfPageConfig = {};
+  if (!state.settings.pdfPageConfig[subj]) state.settings.pdfPageConfig[subj] = {};
+  state.settings.pdfPageConfig[subj][key] = parseInt(val) || 1;
+}
+
+async function savePdfShareConfig() {
+  saveToStorage();
+  const statusEl = document.getElementById('pdf-share-save-status');
+  statusEl.textContent = '로컬 저장 완료';
+  // GAS에도 즉시 반영
+  if (state.settings.gasUrl && state.students.length > 0) {
+    statusEl.textContent = '⏳ 구글시트 반영 중...';
+    try {
+      const payload = {
+        action: 'saveStudents',
+        students: state.students,
+        correctAnswers: state.correctAnswers,
+        studentAnswers: state.studentAnswers,
+        birthdates: state.birthdates,
+        defaultPassword: state.defaultPassword,
+        birthdateMode: state.birthdateMode,
+        examInfo: state.examInfo,
+        teachers: state.teachers,
+        numClasses: state.numClasses,
+        settings: { subjectPdfUrls: state.settings.subjectPdfUrls, pdfPageConfig: state.settings.pdfPageConfig },
+      };
+      const resp = await fetch(state.settings.gasUrl, {method:'POST',mode:'cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
+      const json = await resp.json();
+      statusEl.textContent = json.success ? '✅ 구글시트 반영 완료' : '❌ 오류: ' + json.error;
+    } catch(e) {
+      statusEl.textContent = '❌ ' + e.message;
+    }
+  } else {
+    statusEl.textContent = '✅ 로컬 저장 완료 (구글시트 저장은 학생 데이터 먼저 업로드 후 가능)';
+  }
 }
 
 function closeQStats() {
@@ -2658,6 +2861,7 @@ async function saveToGoogleSheets() {
       examInfo: state.examInfo,
       teachers: state.teachers,
       numClasses: state.numClasses,
+      settings: { subjectPdfUrls: state.settings.subjectPdfUrls, pdfPageConfig: state.settings.pdfPageConfig },
     };
     const resp = await fetch(url, {
       method: 'POST',
@@ -2698,6 +2902,10 @@ async function autoLoadFromGas() {
       state.examInfo        = json.examInfo || state.examInfo;
       if (json.teachers && json.teachers.length > 0) state.teachers = json.teachers;
       if (json.numClasses) state.numClasses = json.numClasses;
+      if (json.settings) {
+        if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
+        if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
+      }
       saveToStorage();
       if (notice) { notice.textContent = `✅ ${json.students.length}명 데이터 로드됨`; }
     } else {
@@ -2733,6 +2941,10 @@ async function loadFromGoogleSheets(isLoginMode = false) {
       state.defaultPassword= json.defaultPassword || '000000';
       state.birthdateMode  = json.birthdateMode || 'default';
       state.examInfo       = json.examInfo || state.examInfo;
+      if (json.settings) {
+        if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
+        if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
+      }
       saveToStorage();
       statusEl.innerHTML = `<span style="color:var(--success);">✅ ${json.students.length}명 데이터 불러오기 완료</span>`;
       if (!isLoginMode) {
