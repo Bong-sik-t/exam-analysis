@@ -917,11 +917,11 @@
     <h1 class="home-title">모의고사 성적 분석 시스템</h1>
     <p class="home-subtitle">과목별 취약점 분석 및 성적 확인</p>
     <div class="home-buttons">
-      <button class="home-btn home-btn-admin" onclick="showAdmin()">
+      <button id="btn-admin" class="home-btn home-btn-admin" onclick="showAdmin()">
         <span class="btn-icon">🔧</span>
         관리자 모드
       </button>
-      <button class="home-btn home-btn-teacher" onclick="showTeacherLogin()">
+      <button id="btn-teacher" class="home-btn home-btn-teacher" onclick="showTeacherLogin()">
         <span class="btn-icon">🏫</span>
         교사 로그인
       </button>
@@ -1531,6 +1531,13 @@ window.addEventListener('load', () => {
     const el = document.getElementById('login-gas-load');
     if (el) el.style.display = 'block';
     autoLoadFromGas();
+  }
+  // ?gas= 링크로 접속한 경우 → 학생용 화면 (관리자/교사 버튼 숨김)
+  if (gasParam) {
+    const adminBtn = document.getElementById('btn-admin');
+    const teacherBtn = document.getElementById('btn-teacher');
+    if (adminBtn) adminBtn.style.display = 'none';
+    if (teacherBtn) teacherBtn.style.display = 'none';
   }
   showSection('home');
 });
