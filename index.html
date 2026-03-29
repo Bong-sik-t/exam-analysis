@@ -962,7 +962,17 @@
     margin-bottom: 12px;
   }
   .pdf-view-btn:hover { background: var(--primary); color: white; }
+  .exam-tab-btn {
+    padding: 7px 14px; border-radius: 20px;
+    background: var(--gray-100); color: var(--gray-600);
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    border: 2px solid var(--gray-200); transition: all 0.2s;
+    display: flex; align-items: center; gap: 2px;
+  }
+  .exam-tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+  .exam-tab-btn:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 </head>
 <body>
 
@@ -1128,6 +1138,22 @@
       </div>
     </div>
 
+    <!-- 시험 관리 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📅 시험 관리</div>
+        <span style="font-size:12px;color:var(--gray-400);">시험을 먼저 추가한 후 해당 시험의 성적 파일을 업로드하세요</span>
+      </div>
+      <div style="padding:16px 20px 20px;">
+        <div id="admin-exam-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;min-height:36px;"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="new-exam-input" class="form-control" placeholder="예: 3월, 6월, 9월, 11월" style="width:150px;" onkeydown="if(event.key==='Enter') addExam()">
+          <button class="btn btn-primary btn-sm" onclick="addExam()">+ 시험 추가</button>
+        </div>
+        <div style="margin-top:10px;font-size:13px;color:var(--gray-500);">현재 선택된 시험: <b id="current-exam-label" style="color:var(--primary);">없음</b> — 이 시험에 엑셀을 업로드합니다</div>
+      </div>
+    </div>
+
     <!-- Excel Upload -->
     <div class="card">
       <div class="card-header">
@@ -1158,6 +1184,39 @@
         <div id="pdf-slot-과탐"   class="pdf-slot" onclick="triggerPdfUpload('과탐')">   <div class="pdf-slot-icon">📄</div><div class="pdf-slot-name">과탐</div>   <div class="pdf-slot-status" id="pdf-status-과탐">미업로드</div>   </div>
       </div>
       <input type="file" id="pdf-file-input" accept=".pdf" style="display:none" onchange="handlePdfUpload(event)">
+    </div>
+
+    <!-- 등급컷 OCR -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📊 등급컷 설정</div>
+        <span style="font-size:12px;color:var(--gray-400);">등급컷 표 스크린샷을 업로드하면 자동으로 읽어들입니다</span>
+      </div>
+      <div style="padding:16px 20px 20px;">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+          <select id="ocr-subject-select" class="form-control" style="width:120px;">
+            <option>국어</option><option>수학</option><option>영어</option>
+            <option>한국사</option><option>사탐</option><option>과탐</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ocr-image-input').click()">🖼️ 등급컷 사진 업로드</button>
+          <input type="file" id="ocr-image-input" accept="image/*" style="display:none" onchange="runGradeCutOCR(event)">
+          <span id="ocr-status" style="font-size:13px;color:var(--gray-500);"></span>
+        </div>
+        <!-- 확인/수정 UI -->
+        <div id="ocr-confirm-area" style="display:none;background:#F8FAFC;border:1px solid var(--gray-200);border-radius:10px;padding:16px;">
+          <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:12px;" id="ocr-confirm-title">인식된 등급컷 확인 후 저장하세요</div>
+          <div id="ocr-inputs-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" onclick="saveOcrGradeCuts()">💾 저장</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ocr-confirm-area').style.display='none'">취소</button>
+          </div>
+        </div>
+        <!-- 현재 등급컷 표시 -->
+        <div style="margin-top:14px;">
+          <div style="font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">현재 등록된 등급컷</div>
+          <div id="current-grade-cuts-display" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- 해설 PDF 공유 설정 -->
@@ -1442,6 +1501,9 @@
     </div>
   </div>
 
+  <!-- Student Exam Tabs -->
+  <div id="student-exam-tabs" style="display:none;gap:8px;flex-wrap:wrap;padding:0 20px 12px;"></div>
+
   <!-- Score Summary Cards -->
   <div class="score-cards-section">
     <div class="score-cards" id="score-cards"></div>
@@ -1591,6 +1653,9 @@ function hakbeonToCode(hakbeon) {
 // STATE
 // ============================================================
 let state = {
+  exams: {},
+  currentExam: null,
+  customCuts: {},
   students: [],
   correctAnswers: {},
   studentAnswers: {},
@@ -1693,6 +1758,229 @@ function handleAdminLogin() {
   showAdminDash();
 }
 
+// ============================================================
+// 기능 1: 다중 시험 관리
+// ============================================================
+function renderExamTabs() {
+  const container = document.getElementById('admin-exam-tabs');
+  if (!container) return;
+  const names = Object.keys(state.exams);
+  if (names.length === 0) {
+    container.innerHTML = '<div style="color:var(--gray-400);font-size:13px;">추가된 시험이 없습니다. 첫 시험을 추가하세요.</div>';
+  } else {
+    container.innerHTML = names.map(name => `
+      <div class="exam-tab-btn ${name === state.currentExam ? 'active' : ''}" onclick="selectAdminExam('${name}')">
+        ${name}
+        <span onclick="deleteExam('${name}', event)" style="margin-left:6px;opacity:0.7;font-size:14px;line-height:1;">×</span>
+      </div>
+    `).join('');
+  }
+  const el = document.getElementById('current-exam-label');
+  if (el) el.textContent = state.currentExam || '없음';
+}
+
+function addExam() {
+  const input = document.getElementById('new-exam-input');
+  const name = input.value.trim();
+  if (!name) { showToast('시험 이름을 입력하세요', 'error'); return; }
+  if (state.exams[name]) { showToast('이미 있는 시험입니다', 'error'); return; }
+  state.exams[name] = {
+    students: [], correctAnswers: {}, studentAnswers: {}, birthdates: {},
+    defaultPassword: '000000', birthdateMode: 'default',
+    examInfo: { year: '2026', grade: '1', exam: name }
+  };
+  state.currentExam = name;
+  input.value = '';
+  renderExamTabs();
+  saveToStorage();
+  showToast('"' + name + '" 시험이 추가됐습니다', 'success');
+}
+
+function selectAdminExam(name) {
+  saveCurrentToExam();
+  state.currentExam = name;
+  loadExamToState(name);
+  renderExamTabs();
+  renderStudentTable(state.students);
+  updateExamInfo();
+  saveToStorage();
+}
+
+function deleteExam(name, e) {
+  e.stopPropagation();
+  if (!confirm('"' + name + '" 시험 데이터를 삭제할까요? 이 시험의 모든 데이터가 삭제됩니다.')) return;
+  delete state.exams[name];
+  const remaining = Object.keys(state.exams);
+  state.currentExam = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+  if (state.currentExam) loadExamToState(state.currentExam);
+  else {
+    state.students = []; state.correctAnswers = {}; state.studentAnswers = {};
+    state.birthdates = {}; state.defaultPassword = '000000';
+  }
+  renderExamTabs();
+  renderStudentTable(state.students);
+  saveToStorage();
+}
+
+function loadExamToState(examName) {
+  const exam = state.exams[examName];
+  if (!exam) return;
+  state.students        = exam.students        || [];
+  state.correctAnswers  = exam.correctAnswers  || {};
+  state.studentAnswers  = exam.studentAnswers  || {};
+  state.birthdates      = exam.birthdates      || {};
+  state.defaultPassword = exam.defaultPassword || '000000';
+  state.birthdateMode   = exam.birthdateMode   || 'default';
+  state.examInfo        = exam.examInfo        || { year: '2026', grade: '1', exam: examName };
+}
+
+function saveCurrentToExam() {
+  if (!state.currentExam) return;
+  if (!state.exams[state.currentExam]) state.exams[state.currentExam] = {};
+  state.exams[state.currentExam] = {
+    students:        state.students,
+    correctAnswers:  state.correctAnswers,
+    studentAnswers:  state.studentAnswers,
+    birthdates:      state.birthdates,
+    defaultPassword: state.defaultPassword,
+    birthdateMode:   state.birthdateMode,
+    examInfo:        state.examInfo,
+  };
+}
+
+function switchStudentExam(examName) {
+  if (examName === state.currentExam) return;
+  const code = state.currentStudent && state.currentStudent.code;
+  state.currentExam = examName;
+  loadExamToState(examName);
+  if (code) {
+    state.currentStudent = state.students.find(s => s.code === code) || null;
+  }
+  if (!state.currentStudent) {
+    showToast('이 시험에 해당 학생 데이터가 없습니다.', 'error');
+    return;
+  }
+  renderScoreTable(state.currentStudent);
+  fetchAllGradeData(state.currentStudent);
+}
+
+// ============================================================
+// 기능 3: 등급컷 OCR
+// ============================================================
+async function runGradeCutOCR(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  const subject = document.getElementById('ocr-subject-select').value;
+  const statusEl = document.getElementById('ocr-status');
+  statusEl.textContent = '⏳ 이미지 분석 중...';
+
+  try {
+    const img = await loadImageFromFile(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+      const val = gray > 128 ? 255 : 0;
+      data[i] = data[i+1] = data[i+2] = val;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    const result = await Tesseract.recognize(canvas, 'eng', {
+      tessedit_char_whitelist: '0123456789.',
+    });
+    const text = result.data.text;
+
+    const nums = [];
+    const matches = text.match(/\d+\.?\d*/g) || [];
+    for (const m of matches) {
+      const n = parseFloat(m);
+      if (n > 0 && n <= 100) nums.push(n);
+    }
+
+    const unique = [...new Set(nums)].sort((a, b) => b - a).slice(0, 8);
+
+    statusEl.textContent = `✅ ${unique.length}개 값 인식됨`;
+    showOcrConfirm(subject, unique);
+  } catch(e) {
+    statusEl.textContent = '❌ 인식 실패: ' + e.message;
+  }
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function showOcrConfirm(subject, cuts) {
+  const area = document.getElementById('ocr-confirm-area');
+  const title = document.getElementById('ocr-confirm-title');
+  const grid = document.getElementById('ocr-inputs-grid');
+  title.textContent = subject + ' 등급컷 확인 후 저장하세요';
+  area.dataset.subject = subject;
+  grid.innerHTML = [1,2,3,4,5,6,7,8].map((grade, i) => `
+    <div style="text-align:center;">
+      <div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">${grade}등급</div>
+      <input type="number" class="form-control" id="ocr-cut-${grade}"
+        value="${cuts[i] !== undefined ? cuts[i] : ''}"
+        style="text-align:center;font-weight:700;" step="0.5" min="0" max="100">
+    </div>
+  `).join('');
+  area.style.display = 'block';
+}
+
+function saveOcrGradeCuts() {
+  const subject = document.getElementById('ocr-confirm-area').dataset.subject;
+  const cuts = [1,2,3,4,5,6,7,8].map(g => parseFloat(document.getElementById('ocr-cut-' + g).value) || 0);
+  for (let i = 0; i < 7; i++) {
+    if (cuts[i] < cuts[i+1]) {
+      showToast((i+1) + '등급이 ' + (i+2) + '등급보다 낮습니다. 확인하세요.', 'error');
+      return;
+    }
+  }
+  if (!state.customCuts) state.customCuts = {};
+  state.customCuts[subject] = cuts;
+  saveToStorage();
+  document.getElementById('ocr-confirm-area').style.display = 'none';
+  document.getElementById('ocr-status').textContent = '✅ ' + subject + ' 등급컷 저장됨';
+  renderCurrentGradeCuts();
+  showToast(subject + ' 등급컷이 저장됐습니다', 'success');
+}
+
+function renderCurrentGradeCuts() {
+  const el = document.getElementById('current-grade-cuts-display');
+  if (!el) return;
+  const allCuts = { ...DEFAULT_CUTS, ...(state.customCuts || {}) };
+  el.innerHTML = SUBJECTS.map(subj => {
+    const cuts = allCuts[subj] || [];
+    const isCustom = state.customCuts && state.customCuts[subj];
+    return '<div style="padding:6px 12px;border-radius:8px;background:' + (isCustom ? '#EFF6FF' : 'var(--gray-50)') + ';border:1px solid ' + (isCustom ? '#BFDBFE' : 'var(--gray-200)') + ';font-size:12px;">' +
+      '<b style="color:' + (isCustom ? '#1D4ED8' : 'var(--gray-600)') + ';">' + subj + '</b>' +
+      (isCustom ? ' <span style="color:#1D4ED8;font-size:10px;">수동설정</span>' : '') +
+      '<br><span style="color:var(--gray-500);">1등: ' + (cuts[0] || '?') + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function getEffectiveCuts(subject) {
+  if (state.gradeData[subject] && state.gradeData[subject].cuts) return state.gradeData[subject].cuts;
+  if (state.customCuts && state.customCuts[subject]) return state.customCuts[subject];
+  return DEFAULT_CUTS[subject] || [];
+}
+
 function showAdminDash() {
   showSection('teacher');  // keep id=teacher for the admin section
   renderStudentTable(state.students);
@@ -1704,6 +1992,8 @@ function showAdminDash() {
   renderTeacherConfigGrid();
   renderPdfShareConfigGrid();
   generateStudentLink(); // GAS URL 있으면 링크 바로 표시
+  renderExamTabs();
+  renderCurrentGradeCuts();
 }
 // Keep showTeacher as alias
 function showTeacher() { showAdminDash(); }
@@ -1996,6 +2286,39 @@ function parseExcel(workbook) {
     (state.settings.gasUrl ? ' — 구글시트에 저장하면 학생들이 스마트폰에서도 조회 가능합니다.' : ''));
   document.getElementById('student-count').textContent = `총 ${count}명`;
   document.getElementById('sync-buttons').style.display = 'block';
+  // 현재 시험에 파싱 결과 저장
+  if (state.currentExam) saveCurrentToExam();
+  else {
+    const examKey = state.examInfo.exam || '3월';
+    state.currentExam = examKey;
+    if (!state.exams[examKey]) state.exams[examKey] = {};
+    saveCurrentToExam();
+  }
+  renderExamTabs();
+  // 파싱 결과 요약
+  const statusEl = document.getElementById('upload-status');
+  if (statusEl) {
+    const subjectSummary = Object.entries(state.correctAnswers)
+      .map(([subj, answers]) => {
+        const validAnswers = answers.filter(a => a && a !== '');
+        return validAnswers.length > 0 ? `${subj} ${validAnswers.length}문항` : null;
+      })
+      .filter(Boolean)
+      .join(', ');
+    const answerCount = Object.values(state.studentAnswers)
+      .reduce((total, subjData) => total + Object.keys(subjData).length, 0);
+    statusEl.innerHTML = `
+      <div style="margin-top:12px;padding:14px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;">
+        <div style="font-weight:700;color:#15803D;margin-bottom:8px;">✅ 파싱 완료</div>
+        <div style="font-size:13px;color:#166534;line-height:1.8;">
+          👥 학생 <b>${state.students.length}명</b> 인식<br>
+          📝 정답 인식: ${subjectSummary || '없음'}<br>
+          📊 학생 응답 데이터: <b>${answerCount}건</b>
+          ${state.currentExam ? '<br>📅 시험: <b>' + state.currentExam + '</b>' : ''}
+        </div>
+      </div>
+    `;
+  }
   showToast(`${count}명 학생 데이터가 로드되었습니다.`, 'success');
 }
 
@@ -2350,10 +2673,7 @@ const DEFAULT_CUTS = {
 };
 
 function getGradeCuts(subject) {
-  if (state.gradeData[subject] && state.gradeData[subject].cuts) {
-    return state.gradeData[subject].cuts;
-  }
-  return DEFAULT_CUTS[subject] || [];
+  return getEffectiveCuts(subject);
 }
 
 // ============================================================
@@ -2865,6 +3185,8 @@ async function saveToGoogleSheets() {
       teachers: state.teachers,
       numClasses: state.numClasses,
       settings: { subjectPdfUrls: state.settings.subjectPdfUrls, pdfPageConfig: state.settings.pdfPageConfig },
+      exams: (() => { saveCurrentToExam(); return state.exams; })(),
+      currentExam: state.currentExam,
     };
     const resp = await fetch(url, {
       method: 'POST',
@@ -2909,6 +3231,22 @@ async function autoLoadFromGas() {
         if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
         if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
       }
+      // 멀티 시험 구조 처리
+      if (json.exams && Object.keys(json.exams).length > 0) {
+        state.exams = json.exams;
+        state.currentExam = json.currentExam || Object.keys(json.exams)[0];
+        loadExamToState(state.currentExam);
+      } else {
+        const examKey = (json.examInfo && json.examInfo.exam) || '3월';
+        state.exams = {};
+        state.exams[examKey] = {
+          students: json.students, correctAnswers: json.correctAnswers || {},
+          studentAnswers: json.studentAnswers || {}, birthdates: json.birthdates || {},
+          defaultPassword: json.defaultPassword || '000000', birthdateMode: json.birthdateMode || 'default',
+          examInfo: json.examInfo || { year: '2026', grade: '1', exam: examKey }
+        };
+        state.currentExam = examKey;
+      }
       saveToStorage();
       if (notice) { notice.textContent = `✅ ${json.students.length}명 데이터 로드됨`; }
     } else {
@@ -2947,6 +3285,22 @@ async function loadFromGoogleSheets(isLoginMode = false) {
       if (json.settings) {
         if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
         if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
+      }
+      // 멀티 시험 구조 처리
+      if (json.exams && Object.keys(json.exams).length > 0) {
+        state.exams = json.exams;
+        state.currentExam = json.currentExam || Object.keys(json.exams)[0];
+        loadExamToState(state.currentExam);
+      } else {
+        const examKey = (json.examInfo && json.examInfo.exam) || '3월';
+        state.exams = {};
+        state.exams[examKey] = {
+          students: json.students, correctAnswers: json.correctAnswers || {},
+          studentAnswers: json.studentAnswers || {}, birthdates: json.birthdates || {},
+          defaultPassword: json.defaultPassword || '000000', birthdateMode: json.birthdateMode || 'default',
+          examInfo: json.examInfo || { year: '2026', grade: '1', exam: examKey }
+        };
+        state.currentExam = examKey;
       }
       saveToStorage();
       statusEl.innerHTML = `<span style="color:var(--success);">✅ ${json.students.length}명 데이터 불러오기 완료</span>`;
@@ -3194,6 +3548,20 @@ function renderScoreCards(student) {
 // SCORE TABLE
 // ============================================================
 function renderScoreTable(student) {
+  // 시험 탭 렌더링
+  const examNames = Object.keys(state.exams);
+  const examTabArea = document.getElementById('student-exam-tabs');
+  if (examTabArea) {
+    if (examNames.length > 1) {
+      examTabArea.innerHTML = examNames.map(name =>
+        '<button class="exam-tab-btn ' + (name === state.currentExam ? 'active' : '') + '" ' +
+        'onclick="switchStudentExam(\'' + name + '\')" style="font-size:12px;padding:5px 12px;">' + name + '</button>'
+      ).join('');
+      examTabArea.style.display = 'flex';
+    } else {
+      examTabArea.style.display = 'none';
+    }
+  }
   const tbody = document.getElementById('score-detail-tbody');
   const rows = SUBJECTS.map(subj => {
     const score = student.scores[subj] || 0;
@@ -3559,6 +3927,9 @@ function saveToStorage() {
       numClasses: state.numClasses,
       teachers: state.teachers,
       adminPassword: state.adminPassword,
+      exams: state.exams,
+      currentExam: state.currentExam,
+      customCuts: state.customCuts,
     };
     localStorage.setItem('examAnalysisState', JSON.stringify(toSave));
   } catch(e) {
@@ -3582,6 +3953,9 @@ function loadFromStorage() {
     if (data.numClasses)      state.numClasses      = data.numClasses;
     if (data.teachers)        state.teachers        = data.teachers;
     if (data.adminPassword)   state.adminPassword   = data.adminPassword;
+    if (data.exams)           state.exams           = data.exams;
+    if (data.currentExam)     state.currentExam     = data.currentExam;
+    if (data.customCuts)      state.customCuts      = data.customCuts;
     // Sync UI
     if (data.examInfo) {
       setTimeout(() => {
