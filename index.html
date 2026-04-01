@@ -1328,6 +1328,26 @@
       </div>
     </div>
 
+    <!-- 추가 정보 양식 다운로드 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📋 추가 정보 양식 다운로드</div>
+        <span style="font-size:12px;color:var(--gray-400);">구글 로그인 / 학부모 로그인 설정에 필요한 양식</span>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">
+        <div style="padding:12px;background:#EFF6FF;border-radius:8px;border:1px solid #BFDBFE;">
+          <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🔵 학생 구글 계정 매핑 CSV</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">학생 구글 계정으로 로그인하려면 필요합니다. (학번 → 구글 계정 매핑)</div>
+          <button class="btn btn-primary btn-sm" onclick="downloadGoogleAccountCsv()">⬇ 구글 계정 양식 다운로드</button>
+        </div>
+        <div style="padding:12px;background:#FFF7ED;border-radius:8px;border:1px solid #FED7AA;">
+          <div style="font-size:13px;font-weight:700;color:#C2410C;margin-bottom:4px;">🟠 학부모 로그인 정보 CSV</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">학부모가 학번+생년월일+핸드폰번호로 로그인하려면 필요합니다.</div>
+          <button class="btn btn-sm" style="background:#EA580C;color:white;" onclick="downloadParentLoginCsv()">⬇ 학부모 로그인 양식 다운로드</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Student Table -->
     <div class="card" id="student-table-card">
       <div class="card-header">
@@ -2465,6 +2485,30 @@ function saveDefaultPassword() {
   updateBdSummaryBadge();
   document.getElementById('default-pw-status').textContent = '✅ 저장됨';
   setTimeout(() => { document.getElementById('default-pw-status').textContent = ''; }, 2000);
+}
+
+function downloadGoogleAccountCsv() {
+  const header = '학번(4자리),구글계정\n';
+  const rows = state.students.length > 0
+    ? state.students.map(s => `${codeToHakbeon(s.code)},`).join('\n')
+    : '1101,student@kyungnam.hs.kr\n1102,student2@kyungnam.hs.kr';
+  const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '구글계정_매핑양식.csv';
+  a.click();
+}
+
+function downloadParentLoginCsv() {
+  const header = '학번(4자리),생년월일(6자리),학부모핸드폰(숫자만)\n';
+  const rows = state.students.length > 0
+    ? state.students.map(s => `${codeToHakbeon(s.code)},,`).join('\n')
+    : '1101,080315,01012345678\n1102,071224,01098765432';
+  const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '학부모로그인_양식.csv';
+  a.click();
 }
 
 function downloadBirthdateTemplate() {
