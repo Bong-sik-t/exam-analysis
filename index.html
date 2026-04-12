@@ -1076,36 +1076,6 @@
       </div>
     </div>
 
-    <!-- Exam Config -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">⚙️ 시험 설정</div>
-      </div>
-      <div class="config-grid">
-        <div class="form-group">
-          <label class="form-label">학년</label>
-          <select class="form-control" id="cfg-grade" onchange="updateExamInfo()">
-            <option value="1">1학년</option>
-            <option value="2">2학년</option>
-            <option value="3">3학년</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">시험 월</label>
-          <select class="form-control" id="cfg-exam" onchange="updateExamInfo()">
-            <option value="3월">3월</option>
-            <option value="6월">6월</option>
-            <option value="9월">9월</option>
-            <option value="11월">11월</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">연도</label>
-          <input type="number" class="form-control" id="cfg-year" value="2026" onchange="updateExamInfo()">
-        </div>
-      </div>
-    </div>
-
     <!-- Google Sheets / GAS 연결 -->
     <div class="card">
       <div class="card-header">
@@ -1180,15 +1150,28 @@
     <div class="card">
       <div class="card-header">
         <div class="card-title">📅 시험 관리</div>
-        <span style="font-size:12px;color:var(--gray-400);">시험을 먼저 추가한 후 해당 시험의 성적 파일을 업로드하세요</span>
       </div>
       <div style="padding:16px 20px 20px;">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--gray-200);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;color:var(--gray-600);white-space:nowrap;">학년</label>
+            <select class="form-control" id="cfg-grade" onchange="updateExamInfo()" style="width:90px;">
+              <option value="1">1학년</option>
+              <option value="2">2학년</option>
+              <option value="3">3학년</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;color:var(--gray-600);white-space:nowrap;">연도</label>
+            <input type="number" class="form-control" id="cfg-year" value="2026" onchange="updateExamInfo()" style="width:90px;">
+          </div>
+        </div>
         <div id="admin-exam-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;min-height:36px;"></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input type="text" id="new-exam-input" class="form-control" placeholder="예: 3월, 6월, 9월, 11월" style="width:150px;" onkeydown="if(event.key==='Enter') addExam()">
           <button class="btn btn-primary btn-sm" onclick="addExam()">+ 시험 추가</button>
         </div>
-        <div style="margin-top:10px;font-size:13px;color:var(--gray-500);">현재 선택된 시험: <b id="current-exam-label" style="color:var(--primary);">없음</b> — 이 시험에 엑셀을 업로드합니다</div>
+        <div style="margin-top:10px;font-size:13px;color:var(--gray-500);">현재 선택된 시험: <b id="current-exam-label" style="color:var(--primary);">없음</b></div>
       </div>
     </div>
 
@@ -2308,9 +2291,11 @@ function showLogin() {
 // EXAM CONFIG
 // ============================================================
 function updateExamInfo() {
-  state.examInfo.grade = document.getElementById('cfg-grade').value;
-  state.examInfo.exam  = document.getElementById('cfg-exam').value;
-  state.examInfo.year  = document.getElementById('cfg-year').value;
+  const grade = document.getElementById('cfg-grade');
+  const year  = document.getElementById('cfg-year');
+  if (grade) state.examInfo.grade = grade.value;
+  if (year)  state.examInfo.year  = year.value;
+  state.examInfo.exam = state.currentExam || state.examInfo.exam;
   saveToStorage();
 }
 
@@ -4476,10 +4461,8 @@ function loadFromStorage() {
     if (data.examInfo) {
       setTimeout(() => {
         const gradeEl = document.getElementById('cfg-grade');
-        const examEl  = document.getElementById('cfg-exam');
         const yearEl  = document.getElementById('cfg-year');
         if (gradeEl) gradeEl.value = data.examInfo.grade;
-        if (examEl)  examEl.value  = data.examInfo.exam;
         if (yearEl)  yearEl.value  = data.examInfo.year;
       }, 100);
     }
