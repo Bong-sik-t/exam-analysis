@@ -1260,7 +1260,10 @@
     <div class="card" id="birthdate-card">
       <div class="card-header">
         <div class="card-title">🔑 학생 로그인 비밀번호 (생년월일) 설정</div>
-        <span id="bd-summary-badge" style="font-size:12px;padding:3px 10px;border-radius:20px;background:var(--gray-100);color:var(--gray-500);">미설정</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn btn-success btn-sm" onclick="downloadBirthdateData()" title="현재 저장된 생년월일 데이터 다운로드">⬇ 저장 데이터 다운로드</button>
+          <span id="bd-summary-badge" style="font-size:12px;padding:3px 10px;border-radius:20px;background:var(--gray-100);color:var(--gray-500);">미설정</span>
+        </div>
       </div>
       <!-- 방법 탭 -->
       <div style="display:flex;gap:0;border-bottom:1px solid var(--gray-200);padding:0 20px;">
@@ -2614,6 +2617,20 @@ function downloadBirthdateTemplate() {
   ws['!cols'] = [{wch:14},{wch:14},{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws, '생년월일');
   XLSX.writeFile(wb, '생년월일_입력양식.xlsx');
+}
+
+function downloadBirthdateData() {
+  const wb = XLSX.utils.book_new();
+  const wsData = [['학번(4자리)', '생년월일(6자리)', '이름(참고용)']];
+  state.students.forEach(s => {
+    const hakbeon = codeToHakbeon(s.code);
+    const bd = state.birthdates[hakbeon] || state.birthdates[s.code] || '';
+    wsData.push([hakbeon, bd, s.name]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{wch:14},{wch:14},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws, '생년월일');
+  XLSX.writeFile(wb, '생년월일_저장데이터.xlsx');
 }
 
 // ============================================================
