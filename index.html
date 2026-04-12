@@ -1140,6 +1140,14 @@
               </div>
               <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">담임선생님이 이 링크로 접속하면 교사 로그인 후 본인 반 학생 성적을 확인할 수 있습니다.</div>
             </div>
+            <div style="padding:12px;background:#FFF7ED;border-radius:8px;border:1px solid #FED7AA;">
+              <div style="font-size:13px;font-weight:600;color:#C2410C;margin-bottom:6px;">👨‍👩‍👧 학부모용 링크 — 학부모님께 공유</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input type="text" id="parent-link-input" readonly style="flex:1;min-width:200px;font-size:12px;padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;background:white;">
+                <button class="btn btn-sm" style="background:#EA580C;color:white;" onclick="copyParentLink()">복사</button>
+              </div>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">학부모님이 이 링크로 접속하면 학부모 로그인 화면만 표시됩니다.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1734,14 +1742,26 @@ window.addEventListener('load', () => {
     if (el) el.style.display = 'block';
     autoLoadFromGas();
   }
-  // ?gas= 링크로 접속한 경우 → 관리자 버튼 숨김
-  // role=teacher 이면 교사 로그인은 보여줌, 없으면 학생만
+  // ?gas= 링크로 접속한 경우 → role에 따라 버튼 표시 제어
   if (gasParam) {
     const role = params.get('role');
-    const adminBtn = document.getElementById('btn-admin');
+    const adminBtn  = document.getElementById('btn-admin');
     const teacherBtn = document.getElementById('btn-teacher');
+    const studentBtn = document.getElementById('btn-student');
+    const parentBtn  = document.getElementById('btn-parent');
     if (adminBtn) adminBtn.style.display = 'none';
-    if (teacherBtn && role !== 'teacher') teacherBtn.style.display = 'none';
+    if (role === 'parent') {
+      // 학부모용: 학부모 로그인만 표시, 나머지 숨김
+      if (teacherBtn) teacherBtn.style.display = 'none';
+      if (studentBtn) studentBtn.style.display = 'none';
+      if (parentBtn) parentBtn.style.display = 'block';
+    } else if (role === 'teacher') {
+      if (parentBtn) parentBtn.style.display = 'none';
+    } else {
+      // 학생용: 교사/학부모 버튼 숨김
+      if (teacherBtn) teacherBtn.style.display = 'none';
+      if (parentBtn) parentBtn.style.display = 'none';
+    }
   }
   showSection('home');
 });
@@ -3485,9 +3505,11 @@ function generateStudentLink() {
   const linkArea = document.getElementById('student-link-area');
   const studentInput = document.getElementById('student-link-input');
   const teacherInput = document.getElementById('teacher-link-input');
+  const parentInput = document.getElementById('parent-link-input');
   if (linkArea) {
     if (studentInput) studentInput.value = `${base}?gas=${gasEnc}`;
     if (teacherInput) teacherInput.value = `${base}?gas=${gasEnc}&role=teacher`;
+    if (parentInput) parentInput.value = `${base}?gas=${gasEnc}&role=parent`;
     linkArea.style.display = 'flex';
   }
 }
@@ -3502,6 +3524,12 @@ function copyTeacherLink() {
   const input = document.getElementById('teacher-link-input');
   if (!input || !input.value) return;
   navigator.clipboard.writeText(input.value).then(() => showToast('담임교사용 링크 복사됨!', 'success'));
+}
+
+function copyParentLink() {
+  const input = document.getElementById('parent-link-input');
+  if (!input || !input.value) return;
+  navigator.clipboard.writeText(input.value).then(() => showToast('학부모용 링크 복사됨!', 'success'));
 }
 
 const GAS_SCRIPT_CODE = `// =============================================
