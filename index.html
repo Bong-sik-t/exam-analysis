@@ -1004,6 +1004,9 @@
     </div>
     <div id="home-gas-notice" style="display:none;margin-top:16px;background:rgba(255,255,255,0.15);border-radius:8px;padding:8px 16px;font-size:14px;color:white;"></div>
     <div class="home-footer">Excel 성적 파일 업로드 • 과목별 틀린 문항 시각화 • 학생 개인 조회</div>
+    <div style="margin-top:16px;">
+      <button onclick="startDemo()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:8px 20px;border-radius:20px;font-size:13px;cursor:pointer;">🎮 학생 화면 데모 미리보기</button>
+    </div>
   </div>
 </section>
 
@@ -2627,12 +2630,84 @@ function teacherPreviewStudent(code) {
 
 function exitTeacherPreview() {
   state.isTeacherPreview = false;
+  if (state.isDemoMode) {
+    // 데모 모드 종료 → 원래 상태 복원
+    state.isDemoMode = false;
+    if (state._demoBackup) {
+      Object.assign(state, state._demoBackup);
+      state._demoBackup = null;
+    }
+    destroyCharts();
+    showSection('home');
+    return;
+  }
   if (state.currentViewerRole === 'classTeacher') {
     showTeacherDash();
   } else {
     state.currentViewerRole = 'student';
     showSection('teacher');
   }
+}
+
+function startDemo() {
+  // 현재 상태 백업
+  state._demoBackup = {
+    exams: state.exams,
+    currentExam: state.currentExam,
+    students: state.students,
+    correctAnswers: state.correctAnswers,
+    studentAnswers: state.studentAnswers,
+    gradeCuts: { ...state.gradeCuts },
+    examInfo: { ...state.examInfo },
+    currentStudent: state.currentStudent,
+    isTeacherPreview: state.isTeacherPreview,
+    currentViewerRole: state.currentViewerRole,
+  };
+
+  // 데모용 4개 시험 데이터
+  const demoData = {
+    '3월': { 국어: 72, 수학: 58, 영어: 84, 한국사: 36, 사탐: 37, 과탐: 32 },
+    '6월': { 국어: 78, 수학: 67, 영어: 88, 한국사: 40, 사탐: 41, 과탐: 37 },
+    '9월': { 국어: 83, 수학: 73, 영어: 91, 한국사: 44, 사탐: 43, 과탐: 40 },
+    '11월': { 국어: 87, 수학: 79, 영어: 94, 한국사: 46, 사탐: 45, 과탐: 43 },
+  };
+
+  // 데모 studentAnswers: 문항분석 탭도 보이도록 일부 오답 포함
+  function makeDemoAnswers(scores) {
+    const ans = {};
+    // 국어 45문항
+    for (let i = 1; i <= 45; i++) ans[`국어_${i}`] = (i % 5 === 0) ? 'wrong' : 'correct';
+    // 수학 30문항
+    for (let i = 1; i <= 30; i++) ans[`수학_${i}`] = (i % 4 === 0) ? 'wrong' : 'correct';
+    // 영어 45문항
+    for (let i = 1; i <= 45; i++) ans[`영어_${i}`] = (i % 7 === 0) ? 'wrong' : 'correct';
+    return ans;
+  }
+
+  state.exams = {};
+  Object.entries(demoData).forEach(([month, scores]) => {
+    const student = {
+      code: '10101', name: '홍길동', grade: '1', class: '1', number: '01',
+      scores, rank: Math.floor(Math.random() * 30) + 5
+    };
+    state.exams[month] = {
+      students: [student],
+      correctAnswers: {},
+      studentAnswers: { '10101': makeDemoAnswers(scores) },
+      birthdates: {}, defaultPassword: '000000', birthdateMode: 'default',
+      examInfo: { year: '2026', grade: '1', exam: month }
+    };
+  });
+
+  loadExamToState('3월');
+  state.currentStudent = state.students.find(s => s.code === '10101');
+  state.isTeacherPreview = true;
+  state.isDemoMode = true;
+  state.currentViewerRole = 'admin';
+
+  destroyCharts();
+  showDashboard();
+  showToast('🎮 데모 모드 — 실제 데이터에 영향 없습니다', 'success');
 }
 
 // ============================================================
@@ -2697,8 +2772,10 @@ function showDashboard() {
 
   // Teacher preview bar
   document.getElementById('teacher-preview-bar').style.display = state.isTeacherPreview ? 'block' : 'none';
-  // Show rank in teacher preview bar
-  if (state.isTeacherPreview && s.rank) {
+  if (state.isDemoMode) {
+    document.getElementById('teacher-preview-bar').innerHTML =
+      `🎮 데모 모드 — 가상 데이터입니다. 실제 성적과 무관합니다. &nbsp;<button class="btn btn-sm btn-secondary" onclick="exitTeacherPreview()" style="margin-left:8px;">← 홈으로 돌아가기</button>`;
+  } else if (state.isTeacherPreview && s.rank) {
     document.getElementById('teacher-preview-bar').innerHTML =
       `👁 ${state.currentViewerRole === 'classTeacher' ? '교사' : '관리자'} 미리보기 — 전교 <strong>${s.rank}등</strong> &nbsp;<button class="btn btn-sm btn-secondary" onclick="exitTeacherPreview()" style="margin-left:8px;">← 돌아가기</button>`;
   } else if (state.isTeacherPreview) {
