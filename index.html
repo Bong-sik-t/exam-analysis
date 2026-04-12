@@ -4051,7 +4051,9 @@ function destroyCharts() {
 
 function renderTrendChart(student) {
   const COLORS = { '국어':'#3B82F6','수학':'#EF4444','영어':'#10B981','한국사':'#F59E0B','사탐':'#8B5CF6','과탐':'#EC4899' };
-  const examNames = Object.keys(state.exams);
+  const allExamNames = Object.keys(state.exams);
+  const currentIdx = allExamNames.indexOf(state.currentExam);
+  const examNames = currentIdx >= 0 ? allExamNames.slice(0, currentIdx + 1) : allExamNames;
   const labels = [], scoreDatasets = {}, gradeDatasets = {};
   SUBJECTS.forEach(s => { scoreDatasets[s] = []; gradeDatasets[s] = []; });
 
