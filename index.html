@@ -2024,6 +2024,10 @@ function switchStudentExam(examName) {
   }
   renderScoreTable(state.currentStudent);
   fetchAllGradeData(state.currentStudent);
+  const trendTab = document.getElementById('tab-성적추이');
+  if (trendTab && trendTab.classList.contains('active')) {
+    renderTrendChart(state.currentStudent);
+  }
 }
 
 // ============================================================
