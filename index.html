@@ -1231,17 +1231,23 @@
     <div class="card">
       <div class="card-header">
         <div class="card-title">📊 등급컷 설정</div>
-        <span style="font-size:12px;color:var(--gray-400);">등급컷 표 스크린샷을 업로드하면 자동으로 읽어들입니다</span>
+        <span style="font-size:12px;color:var(--gray-400);">스크린샷 캡처 후 Ctrl+V 또는 파일 업로드</span>
       </div>
       <div style="padding:16px 20px 20px;">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
           <select id="ocr-subject-select" class="form-control" style="width:120px;">
             <option>국어</option><option>수학</option><option>영어</option>
             <option>한국사</option><option>사탐</option><option>과탐</option>
           </select>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ocr-image-input').click()">🖼️ 등급컷 사진 업로드</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ocr-image-input').click()">🖼️ 파일 업로드</button>
           <input type="file" id="ocr-image-input" accept="image/*" style="display:none" onchange="runGradeCutOCR(event)">
           <span id="ocr-status" style="font-size:13px;color:var(--gray-500);"></span>
+        </div>
+        <div id="ocr-paste-zone" onclick="this.focus()" tabindex="0"
+          style="border:2px dashed var(--gray-300);border-radius:10px;padding:18px;text-align:center;color:var(--gray-400);font-size:13px;cursor:pointer;background:var(--gray-50);outline:none;transition:all 0.2s;"
+          onfocus="this.style.borderColor='var(--primary)';this.style.background='#EFF6FF';"
+          onblur="this.style.borderColor='var(--gray-300)';this.style.background='var(--gray-50)';">
+          📋 여기를 클릭한 후 <b style="color:var(--primary);">Ctrl+V</b> 로 스크린샷 붙여넣기
         </div>
         <!-- 확인/수정 UI -->
         <div id="ocr-confirm-area" style="display:none;background:#F8FAFC;border:1px solid var(--gray-200);border-radius:10px;padding:16px;">
@@ -2016,16 +2022,15 @@ function switchStudentExam(examName) {
 // ============================================================
 // 기능 3: 등급컷 OCR
 // ============================================================
-async function runGradeCutOCR(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  event.target.value = '';
+async function processOcrImage(blob) {
   const subject = document.getElementById('ocr-subject-select').value;
   const statusEl = document.getElementById('ocr-status');
+  const pasteZone = document.getElementById('ocr-paste-zone');
   statusEl.textContent = '⏳ 이미지 분석 중...';
+  if (pasteZone) pasteZone.textContent = '⏳ 분석 중...';
 
   try {
-    const img = await loadImageFromFile(file);
+    const img = await loadImageFromFile(blob);
     const canvas = document.createElement('canvas');
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext('2d');
@@ -2039,26 +2044,43 @@ async function runGradeCutOCR(event) {
     }
     ctx.putImageData(imageData, 0, 0);
 
-    const result = await Tesseract.recognize(canvas, 'eng', {
-      tessedit_char_whitelist: '0123456789.',
-    });
-    const text = result.data.text;
-
+    const result = await Tesseract.recognize(canvas, 'eng', { tessedit_char_whitelist: '0123456789.' });
     const nums = [];
-    const matches = text.match(/\d+\.?\d*/g) || [];
-    for (const m of matches) {
+    for (const m of (result.data.text.match(/\d+\.?\d*/g) || [])) {
       const n = parseFloat(m);
       if (n > 0 && n <= 100) nums.push(n);
     }
-
     const unique = [...new Set(nums)].sort((a, b) => b - a).slice(0, 8);
-
     statusEl.textContent = `✅ ${unique.length}개 값 인식됨`;
+    if (pasteZone) pasteZone.innerHTML = '📋 여기를 클릭한 후 <b style="color:var(--primary);">Ctrl+V</b> 로 스크린샷 붙여넣기';
     showOcrConfirm(subject, unique);
   } catch(e) {
     statusEl.textContent = '❌ 인식 실패: ' + e.message;
+    if (pasteZone) pasteZone.innerHTML = '📋 여기를 클릭한 후 <b style="color:var(--primary);">Ctrl+V</b> 로 스크린샷 붙여넣기';
   }
 }
+
+async function runGradeCutOCR(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  await processOcrImage(file);
+}
+
+// 붙여넣기 이벤트 - paste zone 포커스 상태에서 동작
+document.addEventListener('paste', async function(e) {
+  const pasteZone = document.getElementById('ocr-paste-zone');
+  if (!pasteZone) return;
+  // paste zone이 포커스되어 있거나, admin 페이지가 활성화된 경우
+  const adminActive = document.getElementById('teacher') && document.getElementById('teacher').classList.contains('active');
+  if (!adminActive) return;
+  const items = Array.from(e.clipboardData.items);
+  const imageItem = items.find(item => item.type.startsWith('image/'));
+  if (!imageItem) return;
+  e.preventDefault();
+  const blob = imageItem.getAsFile();
+  await processOcrImage(blob);
+});
 
 function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
