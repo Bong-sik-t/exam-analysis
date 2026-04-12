@@ -7,6 +7,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
   :root {
     --primary: #3B82F6;
@@ -994,6 +997,10 @@
         <span class="btn-icon">👤</span>
         학생 로그인
       </button>
+      <button class="home-btn" style="background:white;color:#EA580C;border:2px solid #EA580C;" onclick="showParentLogin()">
+        <span class="btn-icon">👨‍👩‍👧</span>
+        학부모 로그인
+      </button>
     </div>
     <div id="home-gas-notice" style="display:none;margin-top:16px;background:rgba(255,255,255,0.15);border-radius:8px;padding:8px 16px;font-size:14px;color:white;"></div>
     <div class="home-footer">Excel 성적 파일 업로드 • 과목별 틀린 문항 시각화 • 학생 개인 조회</div>
@@ -1338,12 +1345,22 @@
         <div style="padding:12px;background:#EFF6FF;border-radius:8px;border:1px solid #BFDBFE;">
           <div style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:4px;">🔵 학생 구글 계정 매핑 CSV</div>
           <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">학생 구글 계정으로 로그인하려면 필요합니다. (학번 → 구글 계정 매핑)</div>
-          <button class="btn btn-primary btn-sm" onclick="downloadGoogleAccountCsv()">⬇ 구글 계정 양식 다운로드</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-primary btn-sm" onclick="downloadGoogleAccountCsv()">⬇ 양식 다운로드</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('google-csv-input').click()">📂 CSV 업로드</button>
+            <input type="file" id="google-csv-input" accept=".csv" style="display:none" onchange="handleGoogleAccountCsv(event)">
+          </div>
+          <div id="google-csv-status" style="margin-top:6px;font-size:12px;color:var(--success);"></div>
         </div>
         <div style="padding:12px;background:#FFF7ED;border-radius:8px;border:1px solid #FED7AA;">
           <div style="font-size:13px;font-weight:700;color:#C2410C;margin-bottom:4px;">🟠 학부모 로그인 정보 CSV</div>
           <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">학부모가 학번+생년월일+핸드폰번호로 로그인하려면 필요합니다.</div>
-          <button class="btn btn-sm" style="background:#EA580C;color:white;" onclick="downloadParentLoginCsv()">⬇ 학부모 로그인 양식 다운로드</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-sm" style="background:#EA580C;color:white;" onclick="downloadParentLoginCsv()">⬇ 양식 다운로드</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('parent-csv-input').click()">📂 CSV 업로드</button>
+            <input type="file" id="parent-csv-input" accept=".csv" style="display:none" onchange="handleParentCsv(event)">
+          </div>
+          <div id="parent-csv-status" style="margin-top:6px;font-size:12px;color:var(--success);"></div>
         </div>
       </div>
     </div>
@@ -1479,7 +1496,16 @@
   <div class="login-card">
     <div style="font-size:32px;margin-bottom:12px;">🎓</div>
     <div class="login-title">학생 로그인</div>
-    <div class="login-subtitle">학번과 생년월일(6자리)로 로그인하세요</div>
+    <!-- 구글 로그인 -->
+    <button id="google-login-btn" onclick="handleGoogleLogin()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border:2px solid var(--gray-200);border-radius:10px;background:white;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:16px;transition:all 0.2s;" onmouseover="this.style.borderColor='#4285F4'" onmouseout="this.style.borderColor='var(--gray-200)'">
+      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      구글 계정으로 로그인
+    </button>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <div style="flex:1;height:1px;background:var(--gray-200);"></div>
+      <span style="font-size:12px;color:var(--gray-400);">또는 학번으로 로그인</span>
+      <div style="flex:1;height:1px;background:var(--gray-200);"></div>
+    </div>
     <div class="login-form">
       <div class="input-group">
         <label class="input-label">학번 (4자리)</label>
@@ -1499,6 +1525,36 @@
     </div>
     <div class="login-back">
       <a onclick="showSection('home')">← 홈으로 돌아가기</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SECTION: 학부모 로그인 ============== -->
+<section id="parent-login" class="section">
+  <div style="min-height:100vh;background:linear-gradient(135deg,#EA580C 0%,#F97316 100%);display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div class="login-card">
+      <div style="font-size:32px;margin-bottom:12px;">👨‍👩‍👧</div>
+      <div class="login-title">학부모 로그인</div>
+      <div class="login-subtitle">자녀의 학번, 생년월일, 학부모 핸드폰번호를 입력하세요</div>
+      <div class="login-form">
+        <div class="input-group">
+          <label class="input-label">학번 (4자리)</label>
+          <input type="text" class="input-field" id="parent-code" placeholder="예: 1101" maxlength="4" inputmode="numeric">
+        </div>
+        <div class="input-group">
+          <label class="input-label">학생 생년월일 (6자리)</label>
+          <input type="password" class="input-field" id="parent-birth" placeholder="예: 080315" maxlength="6" inputmode="numeric">
+        </div>
+        <div class="input-group">
+          <label class="input-label">학부모 핸드폰번호 (숫자만)</label>
+          <input type="password" class="input-field" id="parent-phone" placeholder="예: 01012345678" maxlength="11" inputmode="numeric" onkeydown="if(event.key==='Enter') handleParentLogin()">
+        </div>
+        <div class="login-error" id="parent-login-error"></div>
+        <button class="login-btn" style="background:#EA580C;" onclick="handleParentLogin()">로그인</button>
+      </div>
+      <div class="login-back">
+        <a onclick="showSection('home')">← 홈으로 돌아가기</a>
+      </div>
     </div>
   </div>
 </section>
@@ -1636,6 +1692,52 @@
 
 <script>
 // ============================================================
+// FIREBASE 초기화
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDO1uDTUPW8GjB_M_IRR7y5vzyiG5vWqmE",
+  authDomain: "exam-analysis-b98e9.firebaseapp.com",
+  projectId: "exam-analysis-b98e9",
+  storageBucket: "exam-analysis-b98e9.firebasestorage.app",
+  messagingSenderId: "299322865686",
+  appId: "1:299322865686:web:b5697f5c2fb0693bc65d37"
+};
+firebase.initializeApp(firebaseConfig);
+const firebaseAuth = firebase.auth();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+async function handleGoogleLogin() {
+  try {
+    const result = await firebaseAuth.signInWithPopup(googleProvider);
+    const email = result.user.email.toLowerCase();
+    // 구글 계정 → 학번 매핑
+    const hakbeon = state.googleAccounts[email] || state.googleAccounts[email.split('@')[0]];
+    if (!hakbeon) {
+      showToast('등록되지 않은 구글 계정입니다. 담임선생님께 문의하세요.', 'error');
+      await firebaseAuth.signOut();
+      return;
+    }
+    const code = hakbeonToCode(hakbeon);
+    const student = state.students.find(s => s.code === code);
+    if (!student) {
+      showToast('학생 데이터를 찾을 수 없습니다.', 'error');
+      await firebaseAuth.signOut();
+      return;
+    }
+    state.currentStudent = student;
+    state.isTeacherPreview = false;
+    state.isParentView = false;
+    showDashboard();
+    showToast(`${student.name} 학생, 환영합니다!`, 'success');
+  } catch(e) {
+    if (e.code !== 'auth/popup-closed-by-user') {
+      showToast('구글 로그인 실패: ' + e.message, 'error');
+    }
+  }
+}
+
+// ============================================================
 // CONSTANTS
 // ============================================================
 // GAS URL은 교사가 설정 — 하드코딩 없음
@@ -1700,6 +1802,9 @@ let state = {
   pdfMeta: {},    // {subject: {name:'...'}}
   currentTeacher: null,  // {classNum, name}
   currentViewerRole: 'student', // 'admin'|'classTeacher'|'student'
+  isParentView: false,
+  googleAccounts: {},  // { 'email@domain.com': '1101' }
+  parentData: {},      // { '1101': { birth:'080315', phone:'01012345678' } }
 };
 
 // ============================================================
@@ -2681,9 +2786,102 @@ function showDashboard() {
 function handleLogout() {
   state.currentStudent = null;
   state.isTeacherPreview = false;
-  // Destroy charts
+  state.isParentView = false;
+  firebaseAuth.signOut().catch(()=>{});
   destroyCharts();
   showSection('home');
+}
+
+// ============================================================
+// 학부모 로그인
+// ============================================================
+function showParentLogin() {
+  document.getElementById('parent-code').value = '';
+  document.getElementById('parent-birth').value = '';
+  document.getElementById('parent-phone').value = '';
+  document.getElementById('parent-login-error').classList.remove('show');
+  showSection('parent-login');
+}
+
+function handleParentLogin() {
+  const hakbeon = document.getElementById('parent-code').value.trim();
+  const birth   = document.getElementById('parent-birth').value.trim();
+  const phone   = document.getElementById('parent-phone').value.trim().replace(/-/g,'');
+  const errEl   = document.getElementById('parent-login-error');
+
+  if (!hakbeon || !birth || !phone) {
+    errEl.textContent = '학번, 생년월일, 핸드폰번호를 모두 입력하세요.';
+    errEl.classList.add('show'); return;
+  }
+  const pd = state.parentData[hakbeon];
+  if (!pd) {
+    errEl.textContent = '등록되지 않은 학번입니다.';
+    errEl.classList.add('show'); return;
+  }
+  if (pd.birth !== birth) {
+    errEl.textContent = '생년월일이 일치하지 않습니다.';
+    errEl.classList.add('show'); return;
+  }
+  if (pd.phone.replace(/-/g,'') !== phone) {
+    errEl.textContent = '핸드폰번호가 일치하지 않습니다.';
+    errEl.classList.add('show'); return;
+  }
+  const code = hakbeonToCode(hakbeon);
+  const student = state.students.find(s => s.code === code);
+  if (!student) {
+    errEl.textContent = '학생 데이터를 찾을 수 없습니다.';
+    errEl.classList.add('show'); return;
+  }
+  state.currentStudent = student;
+  state.isParentView = true;
+  state.isTeacherPreview = false;
+  showDashboard();
+  showToast(`${student.name} 학생의 학부모로 로그인하셨습니다.`, 'success');
+}
+
+// ============================================================
+// 구글계정/학부모 CSV 업로드
+// ============================================================
+function handleGoogleAccountCsv(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').slice(1); // 헤더 제외
+    let count = 0;
+    lines.forEach(line => {
+      const [hakbeon, email] = line.split(',').map(s => s.trim());
+      if (hakbeon && email) {
+        state.googleAccounts[email.toLowerCase()] = hakbeon;
+        count++;
+      }
+    });
+    saveToStorage();
+    document.getElementById('google-csv-status').textContent = `✅ ${count}명 구글 계정 등록 완료`;
+    event.target.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function handleParentCsv(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').slice(1);
+    let count = 0;
+    lines.forEach(line => {
+      const [hakbeon, birth, phone] = line.split(',').map(s => s.trim());
+      if (hakbeon && birth && phone) {
+        state.parentData[hakbeon] = { birth, phone: phone.replace(/-/g,'') };
+        count++;
+      }
+    });
+    saveToStorage();
+    document.getElementById('parent-csv-status').textContent = `✅ ${count}명 학부모 정보 등록 완료`;
+    event.target.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
 }
 
 // ============================================================
@@ -3974,6 +4172,8 @@ function saveToStorage() {
       exams: state.exams,
       currentExam: state.currentExam,
       customCuts: state.customCuts,
+      googleAccounts: state.googleAccounts,
+      parentData: state.parentData,
     };
     localStorage.setItem('examAnalysisState', JSON.stringify(toSave));
   } catch(e) {
@@ -4000,6 +4200,8 @@ function loadFromStorage() {
     if (data.exams)           state.exams           = data.exams;
     if (data.currentExam)     state.currentExam     = data.currentExam;
     if (data.customCuts)      state.customCuts      = data.customCuts;
+    if (data.googleAccounts)  state.googleAccounts  = data.googleAccounts;
+    if (data.parentData)      state.parentData      = data.parentData;
     // Sync UI
     if (data.examInfo) {
       setTimeout(() => {
