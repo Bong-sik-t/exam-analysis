@@ -1563,7 +1563,7 @@
         </div>
         <div class="score-table-wrap card-body" style="padding:0;">
           <table class="score-detail-table" id="score-detail-table">
-            <thead>
+            <thead id="score-detail-thead">
               <tr>
                 <th>과목</th>
                 <th>원점수</th>
@@ -2798,12 +2798,23 @@ function startDemo() {
     return ans;
   }
 
+  // 공식 성적표 샘플 (표준점수/백분위 포함) - 3월만
+  const demoOfficial = {
+    '3월': {
+      scores:   { 국어: 72, 수학: 58, 영어: 84, 한국사: 36, 사탐: 37, 과탐: 32 },
+      표준점수: { 국어: 117, 수학: 103, 영어: 119, 한국사: 50, 사탐: 62, 과탐: 58 },
+      백분위:   { 국어: 74, 수학: 61, 영어: 78, 한국사: 72, 사탐: 68, 과탐: 65 },
+    }
+  };
+
   state.exams = {};
   Object.entries(demoData).forEach(([month, scores]) => {
     const student = {
       code: '10101', name: '홍길동', grade: '1', class: '1', number: '01',
       scores, rank: Math.floor(Math.random() * 30) + 5
     };
+    const off = demoOfficial[month];
+    const officialStudent = off ? { ...student, 표준점수: off.표준점수, 백분위: off.백분위 } : null;
     state.exams[month] = {
       가채점: {
         students: [student],
@@ -2811,7 +2822,12 @@ function startDemo() {
         studentAnswers: { '10101': makeDemoAnswers(scores) },
         examInfo: { year: '2026', grade: '1', exam: month }
       },
-      공식: null,
+      공식: off ? {
+        students: [officialStudent],
+        correctAnswers: {},
+        studentAnswers: { '10101': makeDemoAnswers(scores) },
+        examInfo: { year: '2026', grade: '1', exam: month }
+      } : null,
       gradeCuts: {},
       birthdates: {}, defaultPassword: '000000', birthdateMode: 'default',
     };
@@ -3911,17 +3927,21 @@ async function fetchAllGradeData(student) {
 // ============================================================
 function renderScoreCards(student) {
   const container = document.getElementById('score-cards');
+  const isOfficial = state.currentMode === '공식';
   const cards = SUBJECTS.map(subj => {
     const score = student.scores[subj] || 0;
     const cfg = SUBJECT_CONFIG[subj];
     const cuts = getGradeCuts(subj);
     const grade = calculateGrade(score, cuts);
+    const std = isOfficial && student.표준점수 ? (student.표준점수[subj] || '-') : null;
+    const pct = isOfficial && student.백분위  ? (student.백분위[subj]  || '-') : null;
     return `
       <div class="score-card">
         <div class="score-card-subject">${subj}</div>
-        <div class="score-card-score">${score}</div>
-        <div class="score-card-max">/ ${cfg.maxScore}점</div>
+        <div class="score-card-score">${isOfficial && std !== null ? std : score}</div>
+        <div class="score-card-max">${isOfficial ? '표준점수' : '/ ' + cfg.maxScore + '점'}</div>
         ${grade ? `<span class="grade-badge grade-${grade}">${grade}등급</span>` : '<span class="grade-badge" style="background:var(--gray-300)">-</span>'}
+        ${isOfficial && pct !== null ? `<div style="font-size:11px;color:#059669;margin-top:4px;font-weight:600;">백분위 ${pct}%</div>` : ''}
       </div>
     `;
   }).join('');
@@ -3957,6 +3977,16 @@ function renderScoreTable(student) {
       '<button class="mode-tab-btn ' + (state.currentMode === '공식' ? 'active' : '') + (has공식 ? '' : ' locked') + '" onclick="switchStudentMode(\'공식\')">' +
       '📋 공식' + (has공식 ? '' : ' 🔒') + '</button>';
   }
+  const isOfficial = state.currentMode === '공식';
+
+  // 헤더 동적 렌더링
+  const thead = document.getElementById('score-detail-thead');
+  if (thead) {
+    thead.innerHTML = isOfficial
+      ? `<tr><th>과목</th><th>원점수</th><th>표준점수</th><th>백분위</th><th>등급</th><th>전국 등급컷</th><th>다음 등급까지</th></tr>`
+      : `<tr><th>과목</th><th>원점수</th><th>최고점</th><th>등급</th><th>전국 등급컷</th><th>다음 등급까지</th></tr>`;
+  }
+
   const tbody = document.getElementById('score-detail-tbody');
   const rows = SUBJECTS.map(subj => {
     const score = student.scores[subj] || 0;
@@ -3977,6 +4007,21 @@ function renderScoreTable(student) {
       }
     }
 
+    if (isOfficial) {
+      const std = (student.표준점수 && student.표준점수[subj]) ? student.표준점수[subj] : '-';
+      const pct = (student.백분위 && student.백분위[subj]) ? student.백분위[subj] + '%' : '-';
+      return `
+        <tr>
+          <td class="subject-name">${subj}</td>
+          <td><strong>${score}</strong></td>
+          <td><strong style="color:var(--primary);">${std}</strong></td>
+          <td><strong style="color:#059669;">${pct}</strong></td>
+          <td>${grade ? `<span class="grade-badge grade-${grade}">${grade}등급</span>` : '-'}</td>
+          <td><div class="grade-cuts-row">${cutsStr}</div></td>
+          <td>${nextGradeHtml}</td>
+        </tr>
+      `;
+    }
     return `
       <tr>
         <td class="subject-name">${subj}</td>
