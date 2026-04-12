@@ -974,6 +974,26 @@
   }
   .exam-tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
   .exam-tab-btn:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
+  .mode-tab-btn {
+    padding: 5px 16px;
+    border-radius: 20px;
+    border: 1.5px solid var(--gray-300);
+    background: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--gray-600);
+  }
+  .mode-tab-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+  }
+  .mode-tab-btn.locked {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 </head>
@@ -1176,15 +1196,35 @@
     <div class="card">
       <div class="card-header">
         <div class="card-title">📂 성적 파일 업로드</div>
-        <span style="font-size:12px;color:var(--gray-400);">학교 문항분석 Excel 파일 (예: 3월_1학년_문항분석.xlsx)</span>
+        <span style="font-size:12px;color:var(--gray-400);">현재 선택된 시험에 업로드됩니다</span>
       </div>
-      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('excel-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
-        <div class="upload-icon">📊</div>
-        <div class="upload-text">Excel 파일을 드래그하거나 클릭하여 업로드</div>
-        <div class="upload-hint">시트 구성: 성적표 · 국어 · 수학 · 영어 · 한국사 · 사탐 · 과탐</div>
+      <div style="padding:16px 20px 20px;display:flex;flex-direction:column;gap:14px;">
+        <div style="border:2px solid #FCD34D;border-radius:10px;padding:16px;background:#FFFBEB;">
+          <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:10px;">
+            📝 가채점 업로드
+            <span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:10px;font-size:11px;margin-left:6px;">원점수 + 문항분석</span>
+          </div>
+          <div class="upload-zone" id="upload-zone" onclick="state.currentMode='가채점';document.getElementById('excel-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" style="background:white;">
+            <div class="upload-icon">📊</div>
+            <div class="upload-text">가채점 Excel 파일을 드래그하거나 클릭하여 업로드</div>
+            <div class="upload-hint">시트 구성: 성적표 · 국어 · 수학 · 영어 · 한국사 · 사탐 · 과탐</div>
+          </div>
+          <div class="upload-status" id="upload-status"></div>
+        </div>
+        <div style="border:2px solid #6EE7B7;border-radius:10px;padding:16px;background:#F0FDF4;">
+          <div style="font-size:13px;font-weight:700;color:#065F46;margin-bottom:10px;">
+            📋 공식 성적표 업로드
+            <span style="background:#DCFCE7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;margin-left:6px;">원점수 + 백분위 + 표준점수</span>
+          </div>
+          <div class="upload-zone" id="upload-zone-official" style="background:white;opacity:0.6;cursor:not-allowed;" title="양식 확인 후 활성화됩니다">
+            <div class="upload-icon">🔒</div>
+            <div class="upload-text">공식 성적표 양식 준비 중</div>
+            <div class="upload-hint">내일 양식을 받은 후 업로드 가능합니다</div>
+          </div>
+          <div class="upload-status" id="upload-status-official"></div>
+        </div>
       </div>
       <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" onchange="handleFileSelect(event)">
-      <div class="upload-status" id="upload-status"></div>
     </div>
 
     <!-- PDF Upload -->
@@ -1494,7 +1534,9 @@
   </div>
 
   <!-- Student Exam Tabs -->
-  <div id="student-exam-tabs" style="display:none;gap:8px;flex-wrap:wrap;padding:0 20px 12px;"></div>
+  <div id="student-exam-tabs" style="display:none;gap:8px;flex-wrap:wrap;padding:0 20px 8px;"></div>
+  <!-- Student Mode Tabs (가채점/공식) -->
+  <div id="student-mode-tabs" style="display:none;gap:6px;flex-wrap:wrap;padding:0 20px 12px;border-bottom:1px solid var(--gray-200);margin-bottom:4px;"></div>
 
   <!-- Score Summary Cards -->
   <div class="score-cards-section">
@@ -1506,6 +1548,7 @@
     <div class="tab-nav">
       <button class="tab-btn active" onclick="switchTab('성적표')">📋 성적표</button>
       <button class="tab-btn" onclick="switchTab('문항분석')">🔍 문항분석</button>
+      <button class="tab-btn" onclick="switchTab('성적추이')">📈 성적 추이</button>
     </div>
 
     <!-- 성적표 Tab -->
@@ -1558,6 +1601,20 @@
           <div class="nd-icon">🔍</div>
           <div class="nd-text">과목을 선택하세요</div>
           <div class="nd-hint">위에서 분석할 과목을 선택하세요</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 성적 추이 Tab -->
+    <div class="tab-content" id="tab-성적추이">
+      <div class="charts-grid">
+        <div class="chart-card" style="grid-column:1/-1;">
+          <h3>📈 과목별 원점수 추이</h3>
+          <div class="chart-container" style="height:280px;"><canvas id="trend-score-chart"></canvas></div>
+        </div>
+        <div class="chart-card" style="grid-column:1/-1;">
+          <h3>📊 과목별 등급 추이 (낮을수록 좋음)</h3>
+          <div class="chart-container" style="height:280px;"><canvas id="trend-grade-chart"></canvas></div>
         </div>
       </div>
     </div>
@@ -1693,6 +1750,7 @@ function hakbeonToCode(hakbeon) {
 let state = {
   exams: {},
   currentExam: null,
+  currentMode: '가채점',
   customCuts: {},
   students: [],
   correctAnswers: {},
@@ -1838,9 +1896,12 @@ function addExam() {
   if (!name) { showToast('시험 이름을 입력하세요', 'error'); return; }
   if (state.exams[name]) { showToast('이미 있는 시험입니다', 'error'); return; }
   state.exams[name] = {
-    students: [], correctAnswers: {}, studentAnswers: {}, birthdates: {},
-    defaultPassword: '000000', birthdateMode: 'default',
-    examInfo: { year: '2026', grade: '1', exam: name }
+    가채점: { students: [], correctAnswers: {}, studentAnswers: {}, examInfo: { year: '2026', grade: '1', exam: name } },
+    공식: null,
+    gradeCuts: {},
+    birthdates: {},
+    defaultPassword: '000000',
+    birthdateMode: 'default',
   };
   state.currentExam = name;
   input.value = '';
@@ -1852,7 +1913,8 @@ function addExam() {
 function selectAdminExam(name) {
   saveCurrentToExam();
   state.currentExam = name;
-  loadExamToState(name);
+  state.currentMode = '가채점';
+  loadExamToState(name, '가채점');
   renderExamTabs();
   renderStudentTable(state.students);
   updateExamInfo();
@@ -1875,30 +1937,77 @@ function deleteExam(name, e) {
   saveToStorage();
 }
 
-function loadExamToState(examName) {
+function migrateExamStructure() {
+  Object.keys(state.exams).forEach(examName => {
+    const exam = state.exams[examName];
+    if (exam && exam.students !== undefined && !exam.가채점) {
+      state.exams[examName] = {
+        가채점: {
+          students:       exam.students       || [],
+          correctAnswers: exam.correctAnswers || {},
+          studentAnswers: exam.studentAnswers || {},
+          examInfo:       exam.examInfo       || { year: '2026', grade: '1', exam: examName }
+        },
+        공식: null,
+        gradeCuts: {},
+        birthdates:      exam.birthdates      || {},
+        defaultPassword: exam.defaultPassword || '000000',
+        birthdateMode:   exam.birthdateMode   || 'default',
+      };
+    }
+  });
+}
+
+function loadExamToState(examName, mode) {
   const exam = state.exams[examName];
   if (!exam) return;
-  state.students        = exam.students        || [];
-  state.correctAnswers  = exam.correctAnswers  || {};
-  state.studentAnswers  = exam.studentAnswers  || {};
-  state.birthdates      = exam.birthdates      || {};
-  state.defaultPassword = exam.defaultPassword || '000000';
-  state.birthdateMode   = exam.birthdateMode   || 'default';
-  state.examInfo        = exam.examInfo        || { year: '2026', grade: '1', exam: examName };
+  const m = mode || '가채점';
+  const modeData = (m === '공식' && exam.공식 && exam.공식.students) ? exam.공식 : (exam.가채점 || {});
+  state.currentMode    = (m === '공식' && exam.공식 && exam.공식.students) ? '공식' : '가채점';
+  state.students       = modeData.students       || [];
+  state.correctAnswers = modeData.correctAnswers || {};
+  state.studentAnswers = modeData.studentAnswers || {};
+  state.birthdates     = exam.birthdates         || {};
+  state.defaultPassword= exam.defaultPassword    || '000000';
+  state.birthdateMode  = exam.birthdateMode      || 'default';
+  state.examInfo       = modeData.examInfo       || { year: '2026', grade: '1', exam: examName };
+  if (exam.gradeCuts && Object.keys(exam.gradeCuts).length > 0) {
+    state.customCuts = { ...exam.gradeCuts };
+  }
 }
 
 function saveCurrentToExam() {
   if (!state.currentExam) return;
-  if (!state.exams[state.currentExam]) state.exams[state.currentExam] = {};
-  state.exams[state.currentExam] = {
+  const exam = state.exams[state.currentExam];
+  if (!exam) return;
+  const mode = state.currentMode || '가채점';
+  exam[mode] = {
     students:        state.students,
     correctAnswers:  state.correctAnswers,
     studentAnswers:  state.studentAnswers,
-    birthdates:      state.birthdates,
-    defaultPassword: state.defaultPassword,
-    birthdateMode:   state.birthdateMode,
     examInfo:        state.examInfo,
   };
+  exam.birthdates      = state.birthdates;
+  exam.defaultPassword = state.defaultPassword;
+  exam.birthdateMode   = state.birthdateMode;
+  exam.gradeCuts       = { ...state.customCuts };
+}
+
+function switchStudentMode(mode) {
+  const exam = state.exams[state.currentExam];
+  if (mode === '공식') {
+    if (!exam || !exam.공식 || !exam.공식.students || exam.공식.students.length === 0) {
+      showToast('공식 성적표가 아직 업로드되지 않았습니다.', 'error');
+      return;
+    }
+  }
+  if (mode === state.currentMode) return;
+  const code = state.currentStudent && state.currentStudent.code;
+  loadExamToState(state.currentExam, mode);
+  if (code) state.currentStudent = state.students.find(s => s.code === code) || null;
+  if (!state.currentStudent) { showToast('이 성적에 해당 학생 데이터가 없습니다.', 'error'); return; }
+  renderScoreTable(state.currentStudent);
+  fetchAllGradeData(state.currentStudent);
 }
 
 function switchStudentExam(examName) {
@@ -2006,6 +2115,11 @@ function saveOcrGradeCuts() {
   }
   if (!state.customCuts) state.customCuts = {};
   state.customCuts[subject] = cuts;
+  // Also save to current exam's gradeCuts
+  if (state.currentExam && state.exams[state.currentExam]) {
+    if (!state.exams[state.currentExam].gradeCuts) state.exams[state.currentExam].gradeCuts = {};
+    state.exams[state.currentExam].gradeCuts[subject] = cuts;
+  }
   saveToStorage();
   document.getElementById('ocr-confirm-area').style.display = 'none';
   document.getElementById('ocr-status').textContent = '✅ ' + subject + ' 등급컷 저장됨';
@@ -2691,15 +2805,19 @@ function startDemo() {
       scores, rank: Math.floor(Math.random() * 30) + 5
     };
     state.exams[month] = {
-      students: [student],
-      correctAnswers: {},
-      studentAnswers: { '10101': makeDemoAnswers(scores) },
+      가채점: {
+        students: [student],
+        correctAnswers: {},
+        studentAnswers: { '10101': makeDemoAnswers(scores) },
+        examInfo: { year: '2026', grade: '1', exam: month }
+      },
+      공식: null,
+      gradeCuts: {},
       birthdates: {}, defaultPassword: '000000', birthdateMode: 'default',
-      examInfo: { year: '2026', grade: '1', exam: month }
     };
   });
 
-  loadExamToState('3월');
+  loadExamToState('3월', '가채점');
   state.currentStudent = state.students.find(s => s.code === '10101');
   state.isTeacherPreview = true;
   state.isDemoMode = true;
@@ -3828,6 +3946,17 @@ function renderScoreTable(student) {
       examTabArea.style.display = 'none';
     }
   }
+  // Mode sub-tabs (가채점 / 공식)
+  const modeTabArea = document.getElementById('student-mode-tabs');
+  if (modeTabArea) {
+    const curExam = state.exams[state.currentExam];
+    const has공식 = curExam && curExam.공식 && curExam.공식.students && curExam.공식.students.length > 0;
+    modeTabArea.style.display = 'flex';
+    modeTabArea.innerHTML =
+      '<button class="mode-tab-btn ' + (state.currentMode !== '공식' ? 'active' : '') + '" onclick="switchStudentMode(\'가채점\')">📝 가채점</button>' +
+      '<button class="mode-tab-btn ' + (state.currentMode === '공식' ? 'active' : '') + (has공식 ? '' : ' locked') + '" onclick="switchStudentMode(\'공식\')">' +
+      '📋 공식' + (has공식 ? '' : ' 🔒') + '</button>';
+  }
   const tbody = document.getElementById('score-detail-tbody');
   const rows = SUBJECTS.map(subj => {
     const score = student.scores[subj] || 0;
@@ -3869,8 +3998,70 @@ function renderScoreTable(student) {
 // CHARTS
 // ============================================================
 function destroyCharts() {
-  if (state.charts.radar) { state.charts.radar.destroy(); state.charts.radar = null; }
-  if (state.charts.bar)   { state.charts.bar.destroy();   state.charts.bar   = null; }
+  if (state.charts.radar)      { state.charts.radar.destroy();      state.charts.radar      = null; }
+  if (state.charts.bar)        { state.charts.bar.destroy();        state.charts.bar        = null; }
+  if (state.charts.trendScore) { state.charts.trendScore.destroy(); state.charts.trendScore = null; }
+  if (state.charts.trendGrade) { state.charts.trendGrade.destroy(); state.charts.trendGrade = null; }
+}
+
+function renderTrendChart(student) {
+  const COLORS = { '국어':'#3B82F6','수학':'#EF4444','영어':'#10B981','한국사':'#F59E0B','사탐':'#8B5CF6','과탐':'#EC4899' };
+  const examNames = Object.keys(state.exams);
+  const labels = [], scoreDatasets = {}, gradeDatasets = {};
+  SUBJECTS.forEach(s => { scoreDatasets[s] = []; gradeDatasets[s] = []; });
+
+  examNames.forEach(examName => {
+    const exam = state.exams[examName];
+    if (!exam) return;
+    const modeData = (exam.공식 && exam.공식.students && exam.공식.students.length > 0) ? exam.공식 : exam.가채점;
+    if (!modeData || !modeData.students) return;
+    const st = modeData.students.find(s => s.code === student.code);
+    if (!st) return;
+    labels.push(examName);
+    const examCuts = exam.gradeCuts || {};
+    SUBJECTS.forEach(subj => {
+      const score = (st.scores && st.scores[subj]) || 0;
+      scoreDatasets[subj].push(score);
+      const cuts = examCuts[subj] || DEFAULT_CUTS[subj] || [];
+      gradeDatasets[subj].push(calculateGrade(score, cuts) || 9);
+    });
+  });
+
+  if (labels.length < 2) {
+    const area = document.getElementById('tab-성적추이');
+    if (area) area.innerHTML = '<div class="no-data-state" style="padding:60px 20px;"><div class="nd-icon">📈</div><div class="nd-text">시험 데이터가 2개 이상 필요합니다</div><div class="nd-hint">여러 시험 데이터를 입력하면 성적 추이를 볼 수 있습니다</div></div>';
+    return;
+  }
+
+  if (state.charts.trendScore) { state.charts.trendScore.destroy(); state.charts.trendScore = null; }
+  if (state.charts.trendGrade) { state.charts.trendGrade.destroy(); state.charts.trendGrade = null; }
+
+  const makeDatasets = (data) => SUBJECTS.map(s => ({
+    label: s, data: data[s], borderColor: COLORS[s], backgroundColor: COLORS[s] + '33',
+    tension: 0.35, pointRadius: 6, pointHoverRadius: 8, fill: false, borderWidth: 2.5,
+  }));
+
+  const scoreCtx = document.getElementById('trend-score-chart');
+  if (scoreCtx) {
+    state.charts.trendScore = new Chart(scoreCtx, {
+      type: 'line',
+      data: { labels, datasets: makeDatasets(scoreDatasets) },
+      options: { responsive:true, maintainAspectRatio:false,
+        scales: { y: { min:0, max:100, title:{display:true,text:'원점수'}, ticks:{stepSize:10} } },
+        plugins: { legend:{position:'bottom'} } }
+    });
+  }
+
+  const gradeCtx = document.getElementById('trend-grade-chart');
+  if (gradeCtx) {
+    state.charts.trendGrade = new Chart(gradeCtx, {
+      type: 'line',
+      data: { labels, datasets: makeDatasets(gradeDatasets) },
+      options: { responsive:true, maintainAspectRatio:false,
+        scales: { y: { min:1, max:9, reverse:true, title:{display:true,text:'등급'}, ticks:{stepSize:1, callback: v => v+'등급'} } },
+        plugins: { legend:{position:'bottom'} } }
+    });
+  }
 }
 
 function renderRadarChart(student) {
@@ -3990,7 +4181,7 @@ function renderBarChart(student) {
 // ============================================================
 function switchTab(tabName) {
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-    const names = ['성적표', '문항분석'];
+    const names = ['성적표', '문항분석', '성적추이'];
     btn.classList.toggle('active', names[i] === tabName);
   });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -4006,6 +4197,9 @@ function switchTab(tabName) {
   if (tabName === '문항분석' && state.currentStudent) {
     renderSubjectSelector();
     renderWrongAnswers(state.currentStudent, state.currentSubject);
+  }
+  if (tabName === '성적추이' && state.currentStudent) {
+    renderTrendChart(state.currentStudent);
   }
 }
 
@@ -4221,8 +4415,9 @@ function loadFromStorage() {
     if (data.numClasses)      state.numClasses      = data.numClasses;
     if (data.teachers)        state.teachers        = data.teachers;
     if (data.adminPassword)   state.adminPassword   = data.adminPassword;
-    if (data.exams)           state.exams           = data.exams;
+    if (data.exams) { state.exams = data.exams; migrateExamStructure(); }
     if (data.currentExam)     state.currentExam     = data.currentExam;
+    if (data.currentExam && state.exams[data.currentExam]) loadExamToState(data.currentExam);
     if (data.customCuts)      state.customCuts      = data.customCuts;
     if (data.googleAccounts)  state.googleAccounts  = data.googleAccounts;
     if (data.parentData)      state.parentData      = data.parentData;
