@@ -4064,7 +4064,10 @@ function renderScoreCards(student) {
     const score = student.scores[subj] || 0;
     const cfg = SUBJECT_CONFIG[subj];
     const cuts = getGradeCuts(subj);
-    const grade = calculateGrade(score, cuts);
+    // 공식 모드면 공식등급 우선 사용, 없으면 계산
+    const grade = (isOfficial && student.공식등급 && student.공식등급[subj])
+      ? student.공식등급[subj]
+      : calculateGrade(score, cuts);
     const std = isOfficial && student.표준점수 ? (student.표준점수[subj] || '-') : null;
     const pct = isOfficial && student.백분위  ? (student.백분위[subj]  || '-') : null;
     return `
@@ -4124,7 +4127,10 @@ function renderScoreTable(student) {
     const score = student.scores[subj] || 0;
     const cfg = SUBJECT_CONFIG[subj];
     const cuts = getGradeCuts(subj);
-    const grade = calculateGrade(score, cuts);
+    // 공식 모드면 공식등급 우선, 없으면 계산
+    const grade = (isOfficial && student.공식등급 && student.공식등급[subj])
+      ? student.공식등급[subj]
+      : calculateGrade(score, cuts);
     const nextPoints = getPointsToNextGrade(score, grade, cuts);
     const cutsStr = cuts.length > 0 ? cuts.slice(0,8).join(' / ') : 'N/A';
 
@@ -4142,6 +4148,7 @@ function renderScoreTable(student) {
     if (isOfficial) {
       const std = (student.표준점수 && student.표준점수[subj]) ? student.표준점수[subj] : '-';
       const pct = (student.백분위 && student.백분위[subj]) ? student.백분위[subj] + '%' : '-';
+      const rank = (student.학교석차 && student.학교석차[subj]) ? student.학교석차[subj] : null;
       return `
         <tr>
           <td class="subject-name">${subj}</td>
@@ -4150,7 +4157,7 @@ function renderScoreTable(student) {
           <td><strong style="color:#059669;">${pct}</strong></td>
           <td>${grade ? `<span class="grade-badge grade-${grade}">${grade}등급</span>` : '-'}</td>
           <td><div class="grade-cuts-row">${cutsStr}</div></td>
-          <td>${nextGradeHtml}</td>
+          <td>${rank ? `<span style="font-size:12px;color:#6B7280;">학교 ${rank}등</span>` : nextGradeHtml}</td>
         </tr>
       `;
     }
