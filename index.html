@@ -2379,25 +2379,47 @@ async function handleOfficialScorePdf(event) {
     baseStudents.forEach(s => { studentMap[s.code] = { ...s }; });
 
     let totalMatched = 0, totalParsed = 0;
+    const allParsedRows = []; // 파싱된 전체 행 저장
 
     for (const file of files) {
       const parsed = await parseOfficialScorePdf(file);
       for (const { classNum, students: rows } of parsed) {
         for (const row of rows) {
           totalParsed++;
-          // 반+번호로 코드 생성해서 매칭
+          allParsedRows.push({ classNum, row });
           const code = '1' + String(classNum).padStart(2,'0') + String(row.classNumber).padStart(2,'0');
           let s = studentMap[code];
-          // 코드 매칭 실패 시 이름으로 재시도
           if (!s) s = Object.values(studentMap).find(st => st.name === row.name);
-          if (!s) continue;
-          s.표준점수 = { 국어: row.국어.표준, 수학: row.수학.표준, 영어: null, 한국사: null, 사탐: row.사탐.표준, 과탐: row.과탐.표준 };
-          s.백분위   = { 국어: row.국어.백분위, 수학: row.수학.백분위, 영어: null, 한국사: null, 사탐: row.사탐.백분위, 과탐: row.과탐.백분위 };
-          s.공식등급 = { 국어: row.국어.등급, 수학: row.수학.등급, 영어: row.영어등급, 한국사: row.한국사등급, 사탐: row.사탐.등급, 과탐: row.과탐.등급 };
-          s.학교석차  = { 국어: row.국어.석차, 수학: row.수학.석차, 사탐: row.사탐.석차, 과탐: row.과탐.석차 };
-          totalMatched++;
+          if (s) {
+            s.표준점수 = { 국어: row.국어.표준, 수학: row.수학.표준, 영어: null, 한국사: null, 사탐: row.사탐.표준, 과탐: row.과탐.표준 };
+            s.백분위   = { 국어: row.국어.백분위, 수학: row.수학.백분위, 영어: null, 한국사: null, 사탐: row.사탐.백분위, 과탐: row.과탐.백분위 };
+            s.공식등급 = { 국어: row.국어.등급, 수학: row.수학.등급, 영어: row.영어등급, 한국사: row.한국사등급, 사탐: row.사탐.등급, 과탐: row.과탐.등급 };
+            s.학교석차  = { 국어: row.국어.석차, 수학: row.수학.석차, 사탐: row.사탐.석차, 과탐: row.과탐.석차 };
+            totalMatched++;
+          } else {
+            // 가채점 학생이 없으면 PDF에서 새로 생성
+            const newCode = code;
+            const newStudent = {
+              code: newCode,
+              name: row.name,
+              classNum: classNum,
+              number: row.classNumber,
+              scores: {},
+              표준점수: { 국어: row.국어.표준, 수학: row.수학.표준, 영어: null, 한국사: null, 사탐: row.사탐.표준, 과탐: row.과탐.표준 },
+              백분위:   { 국어: row.국어.백분위, 수학: row.수학.백분위, 영어: null, 한국사: null, 사탐: row.사탐.백분위, 과탐: row.과탐.백분위 },
+              공식등급: { 국어: row.국어.등급, 수학: row.수학.등급, 영어: row.영어등급, 한국사: row.한국사등급, 사탐: row.사탐.등급, 과탐: row.과탐.등급 },
+              학교석차:  { 국어: row.국어.석차, 수학: row.수학.석차, 사탐: row.사탐.석차, 과탐: row.과탐.석차 },
+            };
+            studentMap[newCode] = newStudent;
+            totalMatched++;
+          }
         }
       }
+    }
+
+    if (totalParsed === 0) {
+      statusEl.innerHTML = `<span style="color:var(--danger);">❌ PDF에서 학생 데이터를 읽지 못했습니다. 성적일람표1(학급별) 형식인지 확인하세요.</span>`;
+      return;
     }
 
     // 공식 슬롯에 저장
@@ -2408,7 +2430,7 @@ async function handleOfficialScorePdf(event) {
       examInfo: exam.가채점 ? { ...exam.가채점.examInfo } : { year:'2026', grade:'1', exam: state.currentExam },
     };
     saveToStorage();
-    statusEl.innerHTML = `<span style="color:var(--success);">✅ ${totalMatched}/${totalParsed}명 공식 성적 입력 완료</span>`;
+    statusEl.innerHTML = `<span style="color:var(--success);">✅ ${totalMatched}명 공식 성적 입력 완료 (PDF에서 ${totalParsed}명 읽음)</span>`;
     renderStudentTable(state.students);
     showToast(`공식 성적표 ${totalMatched}명 처리됐습니다`, 'success');
   } catch(e) {
