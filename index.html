@@ -2453,19 +2453,27 @@ async function parseOfficialScorePdf(file) {
     const page = await pdf.getPage(pn);
     const tc = await page.getTextContent();
 
-    // y좌표 기준으로 텍스트 그룹화 → 행 복원
-    const lineMap = new Map();
-    for (const item of tc.items) {
-      if (!item.str.trim()) continue;
-      const y = Math.round(item.transform[5] / 3) * 3;
-      if (!lineMap.has(y)) lineMap.set(y, []);
-      lineMap.get(y).push({ x: item.transform[4], text: item.str.trim() });
-    }
-    const lines = Array.from(lineMap.entries())
-      .sort((a, b) => b[0] - a[0])
-      .map(([, items]) => items.sort((a, b) => a.x - b.x).map(i => i.text).join(' '));
+    // 모든 텍스트 아이템을 y 내림차순, x 오름차순으로 정렬
+    const items = tc.items
+      .filter(i => i.str.trim())
+      .map(i => ({ x: i.transform[4], y: i.transform[5], text: i.str.trim() }))
+      .sort((a, b) => b.y - a.y || a.x - b.x);
 
-    // 반 번호 추출: "1 4 경 남 고 등 학 교" 형식 (글자 사이 공백 있음)
+    // y좌표 기준 그룹화 (허용 오차 6px)
+    const rows = [];
+    for (const item of items) {
+      const last = rows[rows.length - 1];
+      if (last && Math.abs(last.y - item.y) <= 6) {
+        last.texts.push(item.text);
+      } else {
+        rows.push({ y: item.y, texts: [item.text] });
+      }
+    }
+
+    // 각 행을 하나의 문자열로 합침
+    const lines = rows.map(r => r.texts.join(' '));
+
+    // 반 번호 추출: 공백 제거 후 "1반번호고등학교" 패턴
     let classNum = null;
     for (const line of lines) {
       const compact = line.replace(/\s+/g, '');
@@ -2474,18 +2482,48 @@ async function parseOfficialScorePdf(file) {
     }
     if (!classNum) continue;
 
-    // 학생 행 파싱
-    // 형식: 번호 이름 국어(표준 석차 백분위 등급) 수학(표준 석차 백분위 등급) 영어등급 한국사등급 사탐(표준 석차 백분위 등급) 과탐(표준 석차 백분위 등급)
-    // 예: "1 강용훈 80 137 17.51 7 110 49 68.18 4 5 5 40 130 19.02 7 43 124 29.10 6"
+    // 학생 행 파싱: 전체 줄을 합친 후 토큰 분리
+    // 토큰: 번호(숫자), 이름(한글), 이후 숫자들
     const students = [];
     for (const line of lines) {
-      const m = line.match(/^(\d{1,2})\s+([\uAC00-\uD7A3][\uAC00-\uD7A3 ]{0,5}?)\s+([\d. ]+)$/);
-      if (!m) continue;
-      const nums = m[3].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+      const tokens = line.trim().split(/\s+/);
+      // 숫자가 연속으로 붙어있는 경우 분리 (예: "1" "0" → "10")
+      // 번호: 첫 번째 혹은 두 토큰이 숫자이고 합쳐서 1~2자리
+      let idx = 0;
+      let numStr = tokens[idx];
+      if (!numStr || !/^\d+$/.test(numStr)) continue;
+      // 다음 토큰도 숫자이고 이름이 없는 경우(10~99) 합치기
+      if (tokens[idx+1] && /^\d+$/.test(tokens[idx+1]) && !/[\uAC00-\uD7A3]/.test(tokens[idx+1])) {
+        // 하지만 그 다음이 한글인지 확인
+        if (tokens[idx+2] && /[\uAC00-\uD7A3]/.test(tokens[idx+2])) {
+          numStr = tokens[idx] + tokens[idx+1];
+          idx++;
+        }
+      }
+      const classNumber = parseInt(numStr);
+      if (isNaN(classNumber) || classNumber < 1 || classNumber > 50) continue;
+      idx++;
+
+      // 이름: 한글 토큰들 연속
+      let name = '';
+      while (idx < tokens.length && /^[\uAC00-\uD7A3]+$/.test(tokens[idx])) {
+        name += tokens[idx];
+        idx++;
+      }
+      if (!name) continue;
+
+      // 나머지 숫자들 수집
+      const nums = [];
+      while (idx < tokens.length) {
+        const n = parseFloat(tokens[idx]);
+        if (!isNaN(n)) nums.push(n);
+        idx++;
+      }
       if (nums.length < 18) continue;
+
       students.push({
-        classNumber: parseInt(m[1]),
-        name: m[2].trim(),
+        classNumber,
+        name,
         국어:      { 표준: nums[0],  석차: nums[1],  백분위: nums[2],  등급: nums[3]  },
         수학:      { 표준: nums[4],  석차: nums[5],  백분위: nums[6],  등급: nums[7]  },
         영어등급:   nums[8],
