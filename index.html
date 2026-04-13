@@ -2460,7 +2460,7 @@ async function parseOfficialScorePdf(file) {
       const m = line.match(/^(\d{1,2})\s+([\uAC00-\uD7A3][\uAC00-\uD7A3 ]{0,5}?)\s+([\d. ]+)$/);
       if (!m) continue;
       const nums = m[3].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
-      if (nums.length < 20) continue;
+      if (nums.length < 18) continue;
       students.push({
         classNumber: parseInt(m[1]),
         name: m[2].trim(),
