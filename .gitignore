@@ -1,0 +1,8 @@
+node_modules/
+_pdf_test.mjs
+*.pdf
+excel_debug.txt
+kor_sheet.txt
+score_sheet.txt
+sheets.txt
+.claude/
