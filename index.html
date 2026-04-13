@@ -10,7 +10,6 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --primary: #3B82F6;
@@ -1109,18 +1108,6 @@
             </div>
           </div>
         </details>
-        <!-- Firestore 배포 (항상 표시) -->
-        <div style="margin-top:12px;padding:14px;background:#F0FDF4;border-radius:10px;border:1px solid #86EFAC;">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div style="flex:1;">
-              <div style="font-size:13px;font-weight:700;color:#15803D;">☁️ 학생에게 성적 배포</div>
-              <div style="font-size:11px;color:#4B5563;margin-top:2px;">현재 저장된 모든 시험 데이터를 학생/학부모가 볼 수 있도록 서버에 올립니다</div>
-            </div>
-            <button class="btn" style="background:#16A34A;color:white;white-space:nowrap;" onclick="deployToFirestore()">☁️ 배포하기</button>
-          </div>
-          <div id="deploy-status" style="font-size:12px;margin-top:8px;"></div>
-        </div>
-
         <!-- Sync buttons (shown after GAS data is loaded) -->
         <div id="sync-buttons" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);">
           <div style="font-size:13px;color:var(--gray-600);margin-bottom:8px;">📡 구글시트 동기화 — 학생들이 스마트폰으로 조회하려면 저장하세요</div>
@@ -1681,7 +1668,6 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const firebaseAuth = firebase.auth();
-const firestore = firebase.firestore();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -1789,55 +1775,44 @@ let state = {
 // ============================================================
 // INIT
 // ============================================================
-window.addEventListener('load', async () => {
+window.addEventListener('load', () => {
   loadFromStorage();
   loadAllPdfsFromIDB();
   populateTeacherSelect();
   applyNumClasses();
   switchBdTab(state.birthdateMode || 'file');
-
+  // URL 파라미터에서 GAS URL 자동 설정 (학생용 링크로 접속 시)
   const params = new URLSearchParams(window.location.search);
-  const role = params.get('role');
-  const adminBtn   = document.getElementById('btn-admin');
-  const teacherBtn = document.getElementById('btn-teacher');
-  const studentBtn = document.getElementById('btn-student');
-  const parentBtn  = document.getElementById('btn-parent');
-
-  // role 파라미터에 따라 버튼 제어
-  if (role) {
-    if (adminBtn)  adminBtn.style.display  = 'none';
-    if (role === 'parent') {
-      if (teacherBtn) teacherBtn.style.display = 'none';
-      if (studentBtn) studentBtn.style.display = 'none';
-    } else if (role === 'teacher') {
-      if (parentBtn) parentBtn.style.display = 'none';
-    } else {
-      // student
-      if (teacherBtn) teacherBtn.style.display = 'none';
-      if (parentBtn)  parentBtn.style.display  = 'none';
-    }
-    // 학생/학부모/교사용 링크로 접속한 경우 Firestore에서 데이터 로드
-    const loadingEl = document.getElementById('login-gas-load');
-    const statusEl  = document.getElementById('login-gas-status');
-    if (loadingEl) loadingEl.style.display = 'block';
-    if (statusEl)  statusEl.textContent = '성적 데이터 불러오는 중...';
-    const ok = await loadFromFirestore();
-    if (loadingEl) loadingEl.style.display = ok ? 'none' : 'block';
-    if (statusEl)  statusEl.textContent = ok ? '' : '데이터 없음 — 선생님께 문의하세요';
-  }
-
-  // GAS URL 레거시 지원
   const gasParam = params.get('gas');
   if (gasParam) {
     state.settings.gasUrl = decodeURIComponent(gasParam);
     saveToStorage();
-    if (state.settings.gasUrl && !role) {
-      const el = document.getElementById('login-gas-load');
-      if (el) el.style.display = 'block';
-      autoLoadFromGas();
+  }
+  // GAS URL이 있으면 자동으로 데이터 불러오기
+  if (state.settings.gasUrl) {
+    const el = document.getElementById('login-gas-load');
+    if (el) el.style.display = 'block';
+    autoLoadFromGas();
+  }
+  // ?gas= 링크로 접속한 경우 → role에 따라 버튼 표시 제어
+  if (gasParam) {
+    const role = params.get('role');
+    const adminBtn  = document.getElementById('btn-admin');
+    const teacherBtn = document.getElementById('btn-teacher');
+    const studentBtn = document.getElementById('btn-student');
+    const parentBtn  = document.getElementById('btn-parent');
+    if (adminBtn) adminBtn.style.display = 'none';
+    if (role === 'parent') {
+      if (teacherBtn) teacherBtn.style.display = 'none';
+      if (studentBtn) studentBtn.style.display = 'none';
+      if (parentBtn) parentBtn.style.display = 'block';
+    } else if (role === 'teacher') {
+      if (parentBtn) parentBtn.style.display = 'none';
+    } else {
+      if (teacherBtn) teacherBtn.style.display = 'none';
+      if (parentBtn) parentBtn.style.display = 'none';
     }
   }
-
   showSection('home');
 });
 
@@ -4593,84 +4568,6 @@ function clearAllData() {
 
 // ============================================================
 // STORAGE
-// ============================================================
-// ============================================================
-// FIRESTORE 배포 / 불러오기
-// ============================================================
-async function deployToFirestore() {
-  const statusEl = document.getElementById('deploy-status');
-  statusEl.innerHTML = '⏳ 배포 중...';
-  try {
-    const payload = {
-      exams: state.exams,
-      googleAccounts: state.googleAccounts,
-      teachers: state.teachers,
-      numClasses: state.numClasses,
-      settings: state.settings,
-      examInfo: state.examInfo,
-      parentData: state.parentData || {},
-      updatedAt: new Date().toISOString(),
-    };
-    // Firestore 문서 크기 제한(1MB)이 있으므로 시험별로 분리 저장
-    const batch = firestore.batch();
-    // 메타 문서
-    const metaRef = firestore.collection('examData').doc('meta');
-    batch.set(metaRef, {
-      googleAccounts: state.googleAccounts || {},
-      teachers: state.teachers || [],
-      numClasses: state.numClasses || 7,
-      settings: state.settings || {},
-      examInfo: state.examInfo || {},
-      parentData: state.parentData || {},
-      examList: Object.keys(state.exams),
-      updatedAt: new Date().toISOString(),
-    });
-    // 시험별 문서
-    Object.entries(state.exams).forEach(([name, exam]) => {
-      const ref = firestore.collection('examData').doc('exam_' + name);
-      batch.set(ref, { name, ...exam });
-    });
-    await batch.commit();
-    statusEl.innerHTML = `<span style="color:#16A34A;">✅ 배포 완료 — ${new Date().toLocaleTimeString()} (${Object.keys(state.exams).length}개 시험)</span>`;
-    showToast('학생/학부모에게 성적이 배포됐습니다', 'success');
-  } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--danger);">❌ 배포 실패: ${e.message}</span>`;
-    console.error(e);
-  }
-}
-
-async function loadFromFirestore() {
-  try {
-    const metaSnap = await firestore.collection('examData').doc('meta').get();
-    if (!metaSnap.exists) return false;
-    const meta = metaSnap.data();
-    if (meta.googleAccounts) state.googleAccounts = meta.googleAccounts;
-    if (meta.teachers)       state.teachers       = meta.teachers;
-    if (meta.numClasses)     state.numClasses     = meta.numClasses;
-    if (meta.settings)       state.settings       = { ...state.settings, ...meta.settings };
-    if (meta.examInfo)       state.examInfo       = meta.examInfo;
-    if (meta.parentData)     state.parentData     = meta.parentData;
-    // 시험 데이터 로드
-    const examList = meta.examList || [];
-    for (const name of examList) {
-      const snap = await firestore.collection('examData').doc('exam_' + name).get();
-      if (snap.exists) {
-        const d = snap.data();
-        state.exams[name] = d;
-      }
-    }
-    migrateExamStructure();
-    if (examList.length > 0) {
-      const first = examList[0];
-      state.currentExam = first;
-      loadExamToState(first);
-    }
-    return true;
-  } catch(e) {
-    console.warn('Firestore load error:', e);
-    return false;
-  }
-}
 
 function saveToStorage() {
   try {
