@@ -1109,7 +1109,19 @@
             </div>
           </div>
         </details>
-        <!-- Sync buttons (shown after data is loaded) -->
+        <!-- Firestore 배포 (항상 표시) -->
+        <div style="margin-top:12px;padding:14px;background:#F0FDF4;border-radius:10px;border:1px solid #86EFAC;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:700;color:#15803D;">☁️ 학생에게 성적 배포</div>
+              <div style="font-size:11px;color:#4B5563;margin-top:2px;">현재 저장된 모든 시험 데이터를 학생/학부모가 볼 수 있도록 서버에 올립니다</div>
+            </div>
+            <button class="btn" style="background:#16A34A;color:white;white-space:nowrap;" onclick="deployToFirestore()">☁️ 배포하기</button>
+          </div>
+          <div id="deploy-status" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+
+        <!-- Sync buttons (shown after GAS data is loaded) -->
         <div id="sync-buttons" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);">
           <div style="font-size:13px;color:var(--gray-600);margin-bottom:8px;">📡 구글시트 동기화 — 학생들이 스마트폰으로 조회하려면 저장하세요</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1117,17 +1129,6 @@
             <button class="btn btn-secondary btn-sm" onclick="loadFromGoogleSheets()">🔄 구글시트에서 불러오기</button>
           </div>
           <div id="sync-status" style="margin-top:6px;font-size:13px;"></div>
-          <!-- Firestore 배포 -->
-          <div style="margin-top:12px;padding:14px;background:#F0FDF4;border-radius:10px;border:1px solid #86EFAC;">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <div style="flex:1;">
-                <div style="font-size:13px;font-weight:700;color:#15803D;">☁️ 학생에게 성적 배포</div>
-                <div style="font-size:11px;color:#4B5563;margin-top:2px;">현재 저장된 모든 시험 데이터를 학생/학부모가 볼 수 있도록 서버에 올립니다</div>
-              </div>
-              <button class="btn" style="background:#16A34A;color:white;white-space:nowrap;" onclick="deployToFirestore()">☁️ 배포하기</button>
-            </div>
-            <div id="deploy-status" style="font-size:12px;margin-top:8px;"></div>
-          </div>
 
           <!-- 링크 공유 -->
           <div id="student-link-area" style="display:none;margin-top:12px;display:none;flex-direction:column;gap:10px;">
