@@ -1199,15 +1199,16 @@
             📋 공식 성적표 업로드
             <span style="background:#DCFCE7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;margin-left:6px;">원점수 + 백분위 + 표준점수</span>
           </div>
-          <div class="upload-zone" id="upload-zone-official" style="background:white;opacity:0.6;cursor:not-allowed;" title="양식 확인 후 활성화됩니다">
-            <div class="upload-icon">🔒</div>
-            <div class="upload-text">공식 성적표 양식 준비 중</div>
-            <div class="upload-hint">내일 양식을 받은 후 업로드 가능합니다</div>
+          <div class="upload-zone" id="upload-zone-official" onclick="document.getElementById('official-pdf-input').click()" style="background:white;cursor:pointer;">
+            <div class="upload-icon">📋</div>
+            <div class="upload-text">공식 성적일람표 PDF 업로드</div>
+            <div class="upload-hint">반별 PDF 여러 개 동시 선택 가능 · 성적일람표1(학급별) 형식</div>
           </div>
           <div class="upload-status" id="upload-status-official"></div>
         </div>
       </div>
       <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" onchange="handleFileSelect(event)">
+      <input type="file" id="official-pdf-input" accept=".pdf" multiple style="display:none" onchange="handleOfficialScorePdf(event)">
     </div>
 
     <!-- PDF Upload -->
@@ -2341,6 +2342,126 @@ function handleFileSelect(e) {
   const file = e.target.files[0];
   if (file) processExcelFile(file);
   e.target.value = '';
+}
+
+// ============================================================
+// 공식 성적표 PDF 파싱
+// ============================================================
+async function handleOfficialScorePdf(event) {
+  const files = Array.from(event.target.files);
+  event.target.value = '';
+  const statusEl = document.getElementById('upload-status-official');
+  if (!state.currentExam) {
+    statusEl.innerHTML = '<span style="color:var(--danger);">❌ 시험을 먼저 선택하세요</span>';
+    return;
+  }
+  if (!files.length) return;
+  statusEl.innerHTML = '⏳ PDF 분석 중...';
+
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // 가채점 학생 목록을 기반으로 공식 데이터 맵 생성
+    const exam = state.exams[state.currentExam];
+    const baseStudents = (exam.가채점 && exam.가채점.students) ? exam.가채점.students : [];
+    const studentMap = {};
+    baseStudents.forEach(s => { studentMap[s.code] = { ...s }; });
+
+    let totalMatched = 0, totalParsed = 0;
+
+    for (const file of files) {
+      const parsed = await parseOfficialScorePdf(file);
+      for (const { classNum, students: rows } of parsed) {
+        for (const row of rows) {
+          totalParsed++;
+          // 반+번호로 코드 생성해서 매칭
+          const code = '1' + String(classNum).padStart(2,'0') + String(row.classNumber).padStart(2,'0');
+          let s = studentMap[code];
+          // 코드 매칭 실패 시 이름으로 재시도
+          if (!s) s = Object.values(studentMap).find(st => st.name === row.name);
+          if (!s) continue;
+          s.표준점수 = { 국어: row.국어.표준, 수학: row.수학.표준, 영어: null, 한국사: null, 사탐: row.사탐.표준, 과탐: row.과탐.표준 };
+          s.백분위   = { 국어: row.국어.백분위, 수학: row.수학.백분위, 영어: null, 한국사: null, 사탐: row.사탐.백분위, 과탐: row.과탐.백분위 };
+          s.공식등급 = { 국어: row.국어.등급, 수학: row.수학.등급, 영어: row.영어등급, 한국사: row.한국사등급, 사탐: row.사탐.등급, 과탐: row.과탐.등급 };
+          s.학교석차  = { 국어: row.국어.석차, 수학: row.수학.석차, 사탐: row.사탐.석차, 과탐: row.과탐.석차 };
+          totalMatched++;
+        }
+      }
+    }
+
+    // 공식 슬롯에 저장
+    exam.공식 = {
+      students: Object.values(studentMap),
+      correctAnswers: exam.가채점 ? exam.가채점.correctAnswers : {},
+      studentAnswers: exam.가채점 ? exam.가채점.studentAnswers : {},
+      examInfo: exam.가채점 ? { ...exam.가채점.examInfo } : { year:'2026', grade:'1', exam: state.currentExam },
+    };
+    saveToStorage();
+    statusEl.innerHTML = `<span style="color:var(--success);">✅ ${totalMatched}/${totalParsed}명 공식 성적 입력 완료</span>`;
+    renderStudentTable(state.students);
+    showToast(`공식 성적표 ${totalMatched}명 처리됐습니다`, 'success');
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--danger);">❌ 오류: ${e.message}</span>`;
+    console.error(e);
+  }
+}
+
+async function parseOfficialScorePdf(file) {
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({
+    data: ab,
+    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+    cMapPacked: true,
+  }).promise;
+
+  const results = [];
+
+  for (let pn = 1; pn <= pdf.numPages; pn++) {
+    const page = await pdf.getPage(pn);
+    const tc = await page.getTextContent();
+
+    // y좌표 기준으로 텍스트 그룹화 → 행 복원
+    const lineMap = new Map();
+    for (const item of tc.items) {
+      if (!item.str.trim()) continue;
+      const y = Math.round(item.transform[5] / 3) * 3;
+      if (!lineMap.has(y)) lineMap.set(y, []);
+      lineMap.get(y).push({ x: item.transform[4], text: item.str.trim() });
+    }
+    const lines = Array.from(lineMap.entries())
+      .sort((a, b) => b[0] - a[0])
+      .map(([, items]) => items.sort((a, b) => a.x - b.x).map(i => i.text).join(' '));
+
+    // 반 번호 추출: "1 숫자 학교명" 패턴
+    let classNum = null;
+    for (const line of lines) {
+      const m = line.match(/^1\s+(\d+)\s+\S+고등학교/);
+      if (m) { classNum = parseInt(m[1]); break; }
+    }
+    if (!classNum) continue;
+
+    // 학생 행 파싱: 번호(1-2자리) 이름(한글) 숫자×18개
+    const students = [];
+    for (const line of lines) {
+      const m = line.match(/^(\d{1,2})\s+([\uAC00-\uD7A3][\uAC00-\uD7A3\s]{0,6}?)\s+((?:[\d.]+(?:\s+|$)){18})/);
+      if (!m) continue;
+      const nums = m[3].trim().split(/\s+/).map(Number);
+      if (nums.length < 18) continue;
+      students.push({
+        classNumber: parseInt(m[1]),
+        name: m[2].trim(),
+        국어:    { 표준: nums[0], 석차: nums[1], 백분위: nums[2], 등급: nums[3] },
+        수학:    { 표준: nums[4], 석차: nums[5], 백분위: nums[6], 등급: nums[7] },
+        영어등급: nums[8],
+        한국사등급: nums[9],
+        사탐:    { 표준: nums[10], 석차: nums[11], 백분위: nums[12], 등급: nums[13] },
+        과탐:    { 표준: nums[14], 석차: nums[15], 백분위: nums[16], 등급: nums[17] },
+      });
+    }
+    if (students.length > 0) results.push({ classNum, students });
+  }
+  return results;
 }
 
 // ============================================================
