@@ -4879,12 +4879,16 @@ function saveToStorage() {
       adminPassword: state.adminPassword,
       exams: state.exams,
       currentExam: state.currentExam,
+      currentMode: state.currentMode,
       customCuts: state.customCuts,
       googleAccounts: state.googleAccounts,
       parentData: state.parentData,
     };
     localStorage.setItem('examAnalysisState', JSON.stringify(toSave));
   } catch(e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22) {
+      showToast('저장 공간 부족 — 데이터가 저장되지 않았습니다', 'error');
+    }
     console.warn('Storage save error:', e);
   }
 }
@@ -4907,7 +4911,7 @@ function loadFromStorage() {
     if (data.adminPassword)   state.adminPassword   = data.adminPassword;
     if (data.exams) { state.exams = data.exams; migrateExamStructure(); }
     if (data.currentExam)     state.currentExam     = data.currentExam;
-    if (data.currentExam && state.exams[data.currentExam]) loadExamToState(data.currentExam);
+    if (data.currentExam && state.exams[data.currentExam]) loadExamToState(data.currentExam, data.currentMode || '가채점');
     if (data.customCuts)      state.customCuts      = data.customCuts;
     if (data.googleAccounts)  state.googleAccounts  = data.googleAccounts;
     if (data.parentData)      state.parentData      = data.parentData;
