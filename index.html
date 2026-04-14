@@ -1991,6 +1991,7 @@ function switchStudentMode(mode) {
     }
   }
   if (mode === state.currentMode) return;
+  const prevMode = state.currentMode;
   const code = state.currentStudent && state.currentStudent.code;
   loadExamToState(state.currentExam, mode);
   if (code) state.currentStudent = state.students.find(s => s.code === code) || null;
@@ -1998,16 +1999,29 @@ function switchStudentMode(mode) {
     renderScoreTable(state.currentStudent);
     fetchAllGradeData(state.currentStudent);
   } else {
-    // 모드 탭 UI 갱신 후 학생 목록으로 복귀
-    const modeTabArea = document.getElementById('student-mode-tabs');
-    if (modeTabArea) {
-      const curExam = state.exams[state.currentExam];
-      const has공식 = curExam && curExam.공식 && curExam.공식.students && curExam.공식.students.length > 0;
-      modeTabArea.innerHTML =
-        '<button class="mode-tab-btn ' + (state.currentMode !== '공식' ? 'active' : '') + '" onclick="switchStudentMode(\'가채점\')">📝 가채점</button>' +
-        '<button class="mode-tab-btn ' + (state.currentMode === '공식' ? 'active' : '') + (has공식 ? '' : ' locked') + '" onclick="switchStudentMode(\'공식\')">📋 공식' + (has공식 ? '' : ' 🔒') + '</button>';
+    const inDashboard = document.getElementById('dashboard').classList.contains('active');
+    if (inDashboard) {
+      // 대시보드에서 전환 대상 모드에 학생 없음 → 이전 모드로 복원
+      loadExamToState(state.currentExam, prevMode);
+      state.currentStudent = code ? (state.students.find(s => s.code === code) || null) : null;
+      if (state.currentStudent) {
+        showToast((mode === '공식' ? '공식 성적' : '가채점') + ' 데이터가 없습니다.', 'error');
+        renderScoreTable(state.currentStudent);
+      } else {
+        showAdminDash();
+      }
+    } else {
+      // 관리자 목록뷰: 탭 UI 갱신 후 목록 업데이트
+      const modeTabArea = document.getElementById('student-mode-tabs');
+      if (modeTabArea) {
+        const curExam = state.exams[state.currentExam];
+        const has공식 = curExam && curExam.공식 && curExam.공식.students && curExam.공식.students.length > 0;
+        modeTabArea.innerHTML =
+          '<button class="mode-tab-btn ' + (state.currentMode !== '공식' ? 'active' : '') + '" onclick="switchStudentMode(\'가채점\')">📝 가채점</button>' +
+          '<button class="mode-tab-btn ' + (state.currentMode === '공식' ? 'active' : '') + (has공식 ? '' : ' locked') + '" onclick="switchStudentMode(\'공식\')">📋 공식' + (has공식 ? '' : ' 🔒') + '</button>';
+      }
+      renderStudentTable(state.students);
     }
-    renderStudentTable(state.students);
   }
 }
 
@@ -2347,7 +2361,10 @@ function handleDrop(e) {
   e.preventDefault();
   document.getElementById('upload-zone').classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
-  if (file) processExcelFile(file);
+  if (file) {
+    state.currentMode = '가채점';
+    processExcelFile(file);
+  }
 }
 function handleFileSelect(e) {
   const file = e.target.files[0];
@@ -2817,7 +2834,8 @@ function parseExcel(workbook) {
     (state.settings.gasUrl ? ' — 구글시트에 저장하면 학생들이 스마트폰에서도 조회 가능합니다.' : ''));
   document.getElementById('student-count').textContent = `총 ${count}명`;
   document.getElementById('sync-buttons').style.display = 'block';
-  // 현재 시험에 파싱 결과 저장
+  // 현재 시험에 파싱 결과 저장 (항상 가채점 모드에 저장)
+  state.currentMode = '가채점';
   if (state.currentExam) saveCurrentToExam();
   else {
     const examKey = state.examInfo.exam || '3월';
