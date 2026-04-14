@@ -1992,9 +1992,19 @@ function switchStudentMode(mode) {
   }
   if (mode === state.currentMode) return;
   const prevMode = state.currentMode;
-  const code = state.currentStudent && state.currentStudent.code;
+  const prevStudent = state.currentStudent;
+  const code = prevStudent && prevStudent.code;
   loadExamToState(state.currentExam, mode);
+  // 1차: 코드 완전 일치
   if (code) state.currentStudent = state.students.find(s => s.code === code) || null;
+  // 2차: 반+번호로 매칭 (가채점↔공식 코드 형식이 달라도 작동)
+  if (!state.currentStudent && prevStudent) {
+    const pClass = parseInt(prevStudent.class);
+    const pNum   = parseInt(prevStudent.number);
+    state.currentStudent = state.students.find(
+      s => parseInt(s.class) === pClass && parseInt(s.number) === pNum
+    ) || null;
+  }
   if (state.currentStudent) {
     renderScoreTable(state.currentStudent);
     fetchAllGradeData(state.currentStudent);
@@ -2004,6 +2014,13 @@ function switchStudentMode(mode) {
       // 대시보드에서 전환 대상 모드에 학생 없음 → 이전 모드로 복원
       loadExamToState(state.currentExam, prevMode);
       state.currentStudent = code ? (state.students.find(s => s.code === code) || null) : null;
+      if (!state.currentStudent && prevStudent) {
+        const pClass = parseInt(prevStudent.class);
+        const pNum   = parseInt(prevStudent.number);
+        state.currentStudent = state.students.find(
+          s => parseInt(s.class) === pClass && parseInt(s.number) === pNum
+        ) || null;
+      }
       if (state.currentStudent) {
         showToast((mode === '공식' ? '공식 성적' : '가채점') + ' 데이터가 없습니다.', 'error');
         renderScoreTable(state.currentStudent);
