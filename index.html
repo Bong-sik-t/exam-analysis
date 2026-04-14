@@ -2389,7 +2389,7 @@ async function handleOfficialScorePdf(event) {
 
     for (const file of files) {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
-      const parsed = isExcel ? parseOfficialScoreExcel(file) : await parseOfficialScorePdf(file);
+      const parsed = isExcel ? await parseOfficialScoreExcel(file) : await parseOfficialScorePdf(file);
       for (const { classNum, students: rows } of parsed) {
         for (const row of rows) {
           totalParsed++;
