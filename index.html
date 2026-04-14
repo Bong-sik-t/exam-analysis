@@ -1994,9 +1994,12 @@ function switchStudentMode(mode) {
   const code = state.currentStudent && state.currentStudent.code;
   loadExamToState(state.currentExam, mode);
   if (code) state.currentStudent = state.students.find(s => s.code === code) || null;
-  if (!state.currentStudent) { showToast('이 성적에 해당 학생 데이터가 없습니다.', 'error'); return; }
-  renderScoreTable(state.currentStudent);
-  fetchAllGradeData(state.currentStudent);
+  if (state.currentStudent) {
+    renderScoreTable(state.currentStudent);
+    fetchAllGradeData(state.currentStudent);
+  } else {
+    renderStudentTable(state.students);
+  }
 }
 
 function switchStudentExam(examName) {
