@@ -1998,6 +1998,15 @@ function switchStudentMode(mode) {
     renderScoreTable(state.currentStudent);
     fetchAllGradeData(state.currentStudent);
   } else {
+    // 모드 탭 UI 갱신 후 학생 목록으로 복귀
+    const modeTabArea = document.getElementById('student-mode-tabs');
+    if (modeTabArea) {
+      const curExam = state.exams[state.currentExam];
+      const has공식 = curExam && curExam.공식 && curExam.공식.students && curExam.공식.students.length > 0;
+      modeTabArea.innerHTML =
+        '<button class="mode-tab-btn ' + (state.currentMode !== '공식' ? 'active' : '') + '" onclick="switchStudentMode(\'가채점\')">📝 가채점</button>' +
+        '<button class="mode-tab-btn ' + (state.currentMode === '공식' ? 'active' : '') + (has공식 ? '' : ' locked') + '" onclick="switchStudentMode(\'공식\')">📋 공식' + (has공식 ? '' : ' 🔒') + '</button>';
+    }
     renderStudentTable(state.students);
   }
 }
