@@ -975,23 +975,30 @@
   .exam-tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
   .exam-tab-btn:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
   .mode-tab-btn {
-    padding: 5px 16px;
-    border-radius: 20px;
-    border: 1.5px solid var(--gray-300);
-    background: white;
-    font-size: 12px;
-    font-weight: 600;
+    padding: 10px 32px;
+    border-radius: 8px;
+    border: 2px solid var(--gray-300);
+    background: var(--gray-100);
+    font-size: 15px;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.15s;
-    color: var(--gray-600);
+    color: var(--gray-500);
+    min-width: 110px;
   }
   .mode-tab-btn.active {
     background: var(--primary);
     border-color: var(--primary);
     color: white;
+    box-shadow: 0 3px 10px rgba(5,150,105,0.35);
+  }
+  .mode-tab-btn:hover:not(.active):not(.locked) {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: white;
   }
   .mode-tab-btn.locked {
-    opacity: 0.45;
+    opacity: 0.4;
     cursor: not-allowed;
   }
 </style>
@@ -1527,7 +1534,7 @@
   <!-- Student Exam Tabs -->
   <div id="student-exam-tabs" style="display:none;gap:8px;flex-wrap:wrap;padding:0 20px 8px;"></div>
   <!-- Student Mode Tabs (가채점/공식) -->
-  <div id="student-mode-tabs" style="display:none;gap:6px;flex-wrap:wrap;padding:0 20px 12px;border-bottom:1px solid var(--gray-200);margin-bottom:4px;"></div>
+  <div id="student-mode-tabs" style="display:none;gap:10px;flex-wrap:wrap;justify-content:center;padding:12px 20px 16px;border-bottom:1px solid var(--gray-200);margin-bottom:4px;"></div>
 
   <!-- Score Summary Cards -->
   <div class="score-cards-section">
