@@ -1680,6 +1680,32 @@ const firebaseAuth = firebase.auth();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
+// 학생 로그인용: 가채점/공식 두 모드 모두 탐색 (공식 우선), 반+번호 폴백 매칭 포함
+function findStudentForLogin(code) {
+  const exam = state.currentExam && state.exams[state.currentExam];
+  if (!exam) return null;
+  function findIn(students) {
+    if (!students || !students.length) return null;
+    let s = students.find(st => st.code === code);
+    if (!s) {
+      const pClass = parseInt(code.slice(1, 3));
+      const pNum   = parseInt(code.slice(3, 5));
+      if (!isNaN(pClass) && !isNaN(pNum))
+        s = students.find(st => parseInt(st.class) === pClass && parseInt(st.number) === pNum) || null;
+    }
+    return s || null;
+  }
+  if (exam.공식 && exam.공식.students && exam.공식.students.length > 0) {
+    const s = findIn(exam.공식.students);
+    if (s) { loadExamToState(state.currentExam, '공식'); return s; }
+  }
+  if (exam.가채점 && exam.가채점.students && exam.가채점.students.length > 0) {
+    const s = findIn(exam.가채점.students);
+    if (s) { loadExamToState(state.currentExam, '가채점'); return s; }
+  }
+  return null;
+}
+
 async function handleGoogleLogin() {
   try {
     const result = await firebaseAuth.signInWithPopup(googleProvider);
@@ -1692,7 +1718,7 @@ async function handleGoogleLogin() {
       return;
     }
     const code = hakbeonToCode(hakbeon);
-    const student = state.students.find(s => s.code === code);
+    const student = findStudentForLogin(code);
     if (!student) {
       showToast('학생 데이터를 찾을 수 없습니다.', 'error');
       await firebaseAuth.signOut();
@@ -3303,15 +3329,9 @@ function handleStudentLogin() {
     return;
   }
 
-  if (state.students.length === 0) {
-    errEl.textContent = '아직 성적 데이터가 없습니다. 교사 모드에서 Excel 파일을 업로드해야 합니다.';
-    errEl.classList.add('show');
-    return;
-  }
-
-  // 4자리 학번 → 5자리 코드로 변환하여 검색
+  // 4자리 학번 → 5자리 코드로 변환하여 검색 (가채점/공식 두 모드 모두 탐색)
   const studentCode = hakbeonToCode(code);
-  const student = state.students.find(s => s.code === studentCode);
+  const student = findStudentForLogin(studentCode);
   if (!student) {
     errEl.textContent = `학번 ${code}을(를) 찾을 수 없습니다. 학번(4자리)을 다시 확인하세요. 예) 1반 1번 → 1101`;
     errEl.classList.add('show');
