@@ -2363,10 +2363,12 @@ async function handleOfficialScorePdf(event) {
   const statusEl = document.getElementById('upload-status-official');
   if (!statusEl) { alert('upload-status-official 요소 없음'); return; }
   if (!state.currentExam) {
-    statusEl.innerHTML = '<span style="color:var(--danger);">❌ 시험을 먼저 선택하세요</span>';
+    statusEl.className = 'upload-status error';
+    statusEl.textContent = '❌ 시험을 먼저 선택하세요';
     return;
   }
   if (!files.length) return;
+  statusEl.className = 'upload-status loading';
   statusEl.innerHTML = '⏳ PDF 분석 중...';
   console.log('[PDF] 파일 수:', files.length, '시험:', state.currentExam);
 
@@ -2422,7 +2424,8 @@ async function handleOfficialScorePdf(event) {
     }
 
     if (totalParsed === 0) {
-      statusEl.innerHTML = `<span style="color:var(--danger);">❌ PDF에서 학생 데이터를 읽지 못했습니다. 성적일람표1(학급별) 형식인지 확인하세요.</span>`;
+      statusEl.className = 'upload-status error';
+      statusEl.textContent = '❌ PDF에서 학생 데이터를 읽지 못했습니다. 성적일람표1(학급별) 형식인지 확인하세요.';
       return;
     }
 
@@ -2434,11 +2437,13 @@ async function handleOfficialScorePdf(event) {
       examInfo: exam.가채점 ? { ...exam.가채점.examInfo } : { year:'2026', grade:'1', exam: state.currentExam },
     };
     saveToStorage();
-    statusEl.innerHTML = `<span style="color:var(--success);">✅ ${totalMatched}명 공식 성적 입력 완료 (PDF에서 ${totalParsed}명 읽음)</span>`;
+    statusEl.className = 'upload-status success';
+    statusEl.textContent = `✅ ${totalMatched}명 공식 성적 입력 완료 (PDF에서 ${totalParsed}명 읽음)`;
     renderStudentTable(state.students);
     showToast(`공식 성적표 ${totalMatched}명 처리됐습니다`, 'success');
   } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--danger);">❌ 오류: ${e.message}</span>`;
+    statusEl.className = 'upload-status error';
+    statusEl.textContent = `❌ 오류: ${e.message}`;
     console.error(e);
   }
 }
