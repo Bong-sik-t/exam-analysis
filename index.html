@@ -1342,7 +1342,7 @@
       </div>
       <div class="table-wrap">
         <table id="student-table">
-          <thead>
+          <thead id="student-thead">
             <tr>
               <th>학번</th>
               <th>이름</th>
@@ -3074,27 +3074,64 @@ function filterStudents() {
 
 function renderStudentTable(students) {
   const tbody = document.getElementById('student-tbody');
+  const thead = document.getElementById('student-thead');
   document.getElementById('student-count').textContent = `총 ${state.students.length}명`;
+
+  const isOfficial = state.currentMode === '공식';
+
+  // 헤더 업데이트
+  if (thead) {
+    const col5 = isOfficial ? '표준(국어)' : '국어';
+    const col6 = isOfficial ? '표준(수학)' : '수학';
+    const col7 = isOfficial ? '영어등급' : '영어';
+    const col8 = isOfficial ? '한국사등급' : '한국사';
+    const col9 = isOfficial ? '표준(사탐)' : '사탐';
+    const col10 = isOfficial ? '표준(과탐)' : '과탐';
+    const totalLabel = isOfficial ? '표준합계' : '총점';
+    thead.innerHTML = `<tr>
+      <th>학번</th><th>이름</th><th>반</th><th>번호</th>
+      <th>${totalLabel}</th><th>석차</th>
+      <th>${col5}</th><th>${col6}</th><th>${col7}</th>
+      <th>${col8}</th><th>${col9}</th><th>${col10}</th>
+    </tr>`;
+  }
+
   if (!students || students.length === 0) {
     tbody.innerHTML = '<tr><td colspan="12" class="table-empty">학생 데이터가 없습니다. Excel 파일을 업로드하세요.</td></tr>';
     return;
   }
-  tbody.innerHTML = students.map(s => `
-    <tr onclick="teacherPreviewStudent('${s.code}')">
+
+  tbody.innerHTML = students.map(s => {
+    let c1, c2, c3, c4, c5, c6, total;
+    if (isOfficial && s.표준점수) {
+      c1 = s.표준점수['국어'] ?? '-';
+      c2 = s.표준점수['수학'] ?? '-';
+      c3 = (s.공식등급 && s.공식등급['영어']) ? s.공식등급['영어'] + '등급' : '-';
+      c4 = (s.공식등급 && s.공식등급['한국사']) ? s.공식등급['한국사'] + '등급' : '-';
+      c5 = s.표준점수['사탐'] ?? '-';
+      c6 = s.표준점수['과탐'] ?? '-';
+      const nums = [s.표준점수['국어'], s.표준점수['수학'], s.표준점수['사탐'], s.표준점수['과탐']].filter(v => v);
+      total = nums.length ? nums.reduce((a,b) => a+b, 0) : '-';
+    } else {
+      c1 = s.scores['국어'];
+      c2 = s.scores['수학'];
+      c3 = s.scores['영어'];
+      c4 = s.scores['한국사'];
+      c5 = s.scores['사탐'];
+      c6 = s.scores['과탐'];
+      total = s.total;
+    }
+    return `<tr onclick="teacherPreviewStudent('${s.code}')">
       <td><strong>${codeToHakbeon(s.code)}</strong></td>
       <td><strong>${s.name}</strong></td>
       <td>${s.class}</td>
       <td>${s.number}</td>
-      <td><strong>${s.total}</strong></td>
+      <td><strong>${total}</strong></td>
       <td>${s.rank ? s.rank + '등' : '-'}</td>
-      <td>${s.scores['국어']}</td>
-      <td>${s.scores['수학']}</td>
-      <td>${s.scores['영어']}</td>
-      <td>${s.scores['한국사']}</td>
-      <td>${s.scores['사탐']}</td>
-      <td>${s.scores['과탐']}</td>
-    </tr>
-  `).join('');
+      <td>${c1}</td><td>${c2}</td><td>${c3}</td>
+      <td>${c4}</td><td>${c5}</td><td>${c6}</td>
+    </tr>`;
+  }).join('');
 }
 
 function teacherPreviewStudent(code) {
