@@ -2373,7 +2373,7 @@ async function handleOfficialScorePdf(event) {
   const files = Array.from(event.target.files);
   event.target.value = '';
   const statusEl = document.getElementById('upload-status-official');
-  if (!statusEl) { alert('upload-status-official 요소 없음'); return; }
+  if (!statusEl) return;
   if (!state.currentExam) {
     statusEl.className = 'upload-status error';
     statusEl.textContent = '❌ 시험을 먼저 선택하세요';
@@ -2381,31 +2381,48 @@ async function handleOfficialScorePdf(event) {
   }
   if (!files.length) return;
   statusEl.className = 'upload-status loading';
-  statusEl.innerHTML = '⏳ PDF 분석 중...';
-  console.log('[PDF] 파일 수:', files.length, '시험:', state.currentExam);
+  statusEl.textContent = '⏳ 파일 분석 중...';
 
   try {
+    const exam = state.exams[state.currentExam];
+    if (!exam) throw new Error(`시험 데이터 없음: ${state.currentExam}`);
+
+    // ── 전체반 통합 엑셀 (열 C=반, D=번호 구조, 25열 이상) ────────────
+    if (files.length === 1 && /\.(xlsx|xls)$/i.test(files[0].name)) {
+      const students = await parseOfficialScoreAllClasses(files[0]);
+      if (students && students.length > 0) {
+        exam.공식 = {
+          students,
+          correctAnswers: exam.가채점 ? exam.가채점.correctAnswers : {},
+          studentAnswers: exam.가채점 ? exam.가채점.studentAnswers : {},
+          examInfo: exam.가채점 ? { ...exam.가채점.examInfo } : { year:'2026', grade:'1', exam: state.currentExam },
+        };
+        saveToStorage();
+        loadExamToState(state.currentExam, '공식');
+        renderStudentTable(state.students);
+        statusEl.className = 'upload-status success';
+        statusEl.textContent = `✅ ${students.length}명 공식 성적 입력 완료`;
+        showToast(`${students.length}명 처리됐습니다`, 'success');
+        return;
+      }
+    }
+
+    // ── 반별 엑셀/PDF (기존 방식) ──────────────────────────────────────
     if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 라이브러리가 로드되지 않았습니다');
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    // 가채점 학생 목록을 기반으로 공식 데이터 맵 생성
-    const exam = state.exams[state.currentExam];
-    if (!exam) throw new Error(`시험 데이터 없음: ${state.currentExam}`);
     const baseStudents = (exam.가채점 && exam.가채점.students) ? exam.가채점.students : [];
     const studentMap = {};
     baseStudents.forEach(s => { studentMap[s.code] = { ...s }; });
 
     let totalMatched = 0, totalParsed = 0;
-    const allParsedRows = []; // 파싱된 전체 행 저장
-
     for (const file of files) {
       const isExcel = /\.(xlsx|xls)$/i.test(file.name);
       const parsed = isExcel ? await parseOfficialScoreExcel(file) : await parseOfficialScorePdf(file);
       for (const { classNum, students: rows } of parsed) {
         for (const row of rows) {
           totalParsed++;
-          allParsedRows.push({ classNum, row });
           const code = '1' + String(classNum).padStart(2,'0') + String(row.classNumber).padStart(2,'0');
           let s = studentMap[code];
           if (!s) s = Object.values(studentMap).find(st => st.name === row.name);
@@ -2414,50 +2431,27 @@ async function handleOfficialScorePdf(event) {
             s.백분위   = { 국어: row.국어.백분위, 수학: row.수학.백분위, 영어: null, 한국사: null, 사탐: row.사탐.백분위, 과탐: row.과탐.백분위 };
             s.공식등급 = { 국어: row.국어.등급, 수학: row.수학.등급, 영어: row.영어등급, 한국사: row.한국사등급, 사탐: row.사탐.등급, 과탐: row.과탐.등급 };
             s.학교석차  = { 국어: row.국어.석차, 수학: row.수학.석차, 사탐: row.사탐.석차, 과탐: row.과탐.석차 };
-            totalMatched++;
           } else {
-            // 가채점 학생이 없으면 PDF에서 새로 생성
-            const newCode = code;
-            const newStudent = {
-              code: newCode,
-              name: row.name,
-              classNum: classNum,
-              number: row.classNumber,
-              scores: {},
+            studentMap[code] = {
+              code, name: row.name,
+              grade: '1', class: String(classNum), number: String(row.classNumber),
+              total: 0, avg: 0, rank: 0, scores: {},
               표준점수: { 국어: row.국어.표준, 수학: row.수학.표준, 영어: null, 한국사: null, 사탐: row.사탐.표준, 과탐: row.과탐.표준 },
               백분위:   { 국어: row.국어.백분위, 수학: row.수학.백분위, 영어: null, 한국사: null, 사탐: row.사탐.백분위, 과탐: row.과탐.백분위 },
               공식등급: { 국어: row.국어.등급, 수학: row.수학.등급, 영어: row.영어등급, 한국사: row.한국사등급, 사탐: row.사탐.등급, 과탐: row.과탐.등급 },
               학교석차:  { 국어: row.국어.석차, 수학: row.수학.석차, 사탐: row.사탐.석차, 과탐: row.과탐.석차 },
             };
-            studentMap[newCode] = newStudent;
-            totalMatched++;
           }
+          totalMatched++;
         }
       }
     }
 
     if (totalParsed === 0) {
-      // 첫 번째 매칭된 페이지의 row 샘플 출력 (디버그용)
-      let debugInfo = '';
-      for (let pn2 = 1; pn2 <= pdf.numPages; pn2++) {
-        const page2 = await pdf.getPage(pn2);
-        const tc2 = await page2.getTextContent();
-        const ri = tc2.items.filter(i=>i.str.trim()).map(i=>({x:i.transform[4],y:i.transform[5],text:i.str.trim()}));
-        const rm = new Map();
-        for (const tok of ri) { const k=Math.round(tok.y); if(!rm.has(k))rm.set(k,[]); rm.get(k).push(tok); }
-        const rs = [...rm.entries()].sort((a,b)=>b[0]-a[0]).map(([,t])=>t.sort((a,b)=>a.x-b.x).map(t=>t.text));
-        const cp = rs.flat().join('').replace(/\s+/g,'');
-        if (/1\d+[가-힣]+고등학교/.test(cp)) {
-          debugInfo = '페이지'+pn2+' 샘플행: '+rs.slice(3,7).map(r=>JSON.stringify(r)).join(' | ');
-          break;
-        }
-      }
       statusEl.className = 'upload-status error';
-      statusEl.textContent = '❌ 학생 행 파싱 실패. ' + debugInfo;
+      statusEl.textContent = '❌ 학생 데이터를 읽지 못했습니다. 성적일람표1(학급별) 형식인지 확인하세요.';
       return;
     }
-
-    // 공식 슬롯에 저장
     exam.공식 = {
       students: Object.values(studentMap),
       correctAnswers: exam.가채점 ? exam.가채점.correctAnswers : {},
@@ -2466,7 +2460,7 @@ async function handleOfficialScorePdf(event) {
     };
     saveToStorage();
     statusEl.className = 'upload-status success';
-    statusEl.textContent = `✅ ${totalMatched}명 공식 성적 입력 완료 (PDF에서 ${totalParsed}명 읽음)`;
+    statusEl.textContent = `✅ ${totalMatched}명 공식 성적 입력 완료`;
     renderStudentTable(state.students);
     showToast(`공식 성적표 ${totalMatched}명 처리됐습니다`, 'success');
   } catch(e) {
@@ -2474,6 +2468,80 @@ async function handleOfficialScorePdf(event) {
     statusEl.textContent = `❌ 오류: ${e.message}`;
     console.error(e);
   }
+}
+
+// ── 전체반 통합 엑셀 파서 (모의고사 선택회차 자료 형식) ──────────
+// 열: A학년도 B학년 C반 D번호 E이름
+//     F한국사원점수 G한국사등급
+//     H국어선택 I국어원점수 J국어표준 K국어백분위 L국어등급
+//     M수학선택 N수학원점수 O수학표준 P수학백분위 Q수학등급
+//     R영어원점수 S영어등급
+//     T사탐선택 U사탐원점수 V사탐표준 W사탐백분위 X사탐등급
+//     Y과탐선택 Z과탐원점수 AA과탐표준 AB과탐백분위 AC과탐등급
+function parseOfficialScoreAllClasses(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        // 형식 감지: 헤더 2줄 이후 데이터, 열이 25개 이상이고 col[2]가 반 번호
+        const firstData = rows[2];
+        if (!firstData || firstData.length < 25 || isNaN(parseInt(firstData[2]))) {
+          resolve(null); // 이 형식이 아님
+          return;
+        }
+
+        const n = (r, i) => parseFloat(r[i]) || 0;
+        const students = [];
+
+        for (let ri = 2; ri < rows.length; ri++) {
+          const r = rows[ri];
+          const classNum = parseInt(r[2]);
+          const num = parseInt(r[3]);
+          const name = String(r[4] || '').trim();
+          if (isNaN(classNum) || isNaN(num) || !name) continue;
+
+          const code = '1' + String(classNum).padStart(2,'0') + String(num).padStart(2,'0');
+          const 국어점수 = n(r, 8);
+          const 수학점수 = n(r, 13);
+          const 영어점수 = n(r, 17);
+          const 한국사점수 = n(r, 5);
+          const 사탐점수 = n(r, 20);
+          const 과탐점수 = n(r, 25);
+
+          students.push({
+            code, name,
+            grade: '1', class: String(classNum), number: String(num),
+            total: 국어점수 + 수학점수 + 영어점수 + 한국사점수 + 사탐점수 + 과탐점수,
+            avg: 0, rank: 0,
+            scores: { 국어: 국어점수, 수학: 수학점수, 영어: 영어점수, 한국사: 한국사점수, 사탐: 사탐점수, 과탐: 과탐점수 },
+            표준점수: { 국어: n(r,9), 수학: n(r,14), 영어: null, 한국사: null, 사탐: n(r,21), 과탐: n(r,26) },
+            백분위:   { 국어: n(r,10), 수학: n(r,15), 영어: null, 한국사: null, 사탐: n(r,22), 과탐: n(r,27) },
+            공식등급: {
+              국어: parseFloat(r[11]) || 0, 수학: parseFloat(r[16]) || 0,
+              영어: parseFloat(r[18]) || 0, 한국사: parseFloat(r[6]) || 0,
+              사탐: parseFloat(r[23]) || 0, 과탐: parseFloat(r[28]) || 0,
+            },
+            학교석차: { 국어: null, 수학: null, 사탐: null, 과탐: null },
+          });
+        }
+
+        // 반별 석차 계산 (총점 기준)
+        const classes = [...new Set(students.map(s => s.class))];
+        classes.forEach(cls => {
+          const cs = students.filter(s => s.class === cls).sort((a,b) => b.total - a.total);
+          cs.forEach((s, i) => { s.rank = i + 1; });
+        });
+
+        resolve(students.length > 0 ? students : null);
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // ── 엑셀(성적일람표) 파서 ──────────────────────────────────────
