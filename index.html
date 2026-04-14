@@ -2424,8 +2424,23 @@ async function handleOfficialScorePdf(event) {
     }
 
     if (totalParsed === 0) {
+      // 첫 번째 매칭된 페이지의 row 샘플 출력 (디버그용)
+      let debugInfo = '';
+      for (let pn2 = 1; pn2 <= pdf.numPages; pn2++) {
+        const page2 = await pdf.getPage(pn2);
+        const tc2 = await page2.getTextContent();
+        const ri = tc2.items.filter(i=>i.str.trim()).map(i=>({x:i.transform[4],y:i.transform[5],text:i.str.trim()}));
+        const rm = new Map();
+        for (const tok of ri) { const k=Math.round(tok.y); if(!rm.has(k))rm.set(k,[]); rm.get(k).push(tok); }
+        const rs = [...rm.entries()].sort((a,b)=>b[0]-a[0]).map(([,t])=>t.sort((a,b)=>a.x-b.x).map(t=>t.text));
+        const cp = rs.flat().join('').replace(/\s+/g,'');
+        if (/1\d+[가-힣]+고등학교/.test(cp)) {
+          debugInfo = '페이지'+pn2+' 샘플행: '+rs.slice(3,7).map(r=>JSON.stringify(r)).join(' | ');
+          break;
+        }
+      }
       statusEl.className = 'upload-status error';
-      statusEl.textContent = '❌ PDF에서 학생 데이터를 읽지 못했습니다. 성적일람표1(학급별) 형식인지 확인하세요.';
+      statusEl.textContent = '❌ 학생 행 파싱 실패. ' + debugInfo;
       return;
     }
 
