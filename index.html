@@ -2361,19 +2361,23 @@ async function handleOfficialScorePdf(event) {
   const files = Array.from(event.target.files);
   event.target.value = '';
   const statusEl = document.getElementById('upload-status-official');
+  if (!statusEl) { alert('upload-status-official 요소 없음'); return; }
   if (!state.currentExam) {
     statusEl.innerHTML = '<span style="color:var(--danger);">❌ 시험을 먼저 선택하세요</span>';
     return;
   }
   if (!files.length) return;
   statusEl.innerHTML = '⏳ PDF 분석 중...';
+  console.log('[PDF] 파일 수:', files.length, '시험:', state.currentExam);
 
   try {
+    if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 라이브러리가 로드되지 않았습니다');
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     // 가채점 학생 목록을 기반으로 공식 데이터 맵 생성
     const exam = state.exams[state.currentExam];
+    if (!exam) throw new Error(`시험 데이터 없음: ${state.currentExam}`);
     const baseStudents = (exam.가채점 && exam.가채점.students) ? exam.가채점.students : [];
     const studentMap = {};
     baseStudents.forEach(s => { studentMap[s.code] = { ...s }; });
