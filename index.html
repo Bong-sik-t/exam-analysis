@@ -2489,6 +2489,8 @@ async function parseOfficialScorePdf(file) {
     }
     const classNum = parseInt(classMatch[1]);
     console.log('[PDF] 반번호:', classNum);
+    // 행 내용 디버그 (처음 10행)
+    rows.slice(0,10).forEach((r,i) => console.log('[PDF] row'+i+':', JSON.stringify(r)));
 
     // 각 행을 검사하여 학생 데이터 파싱
     // 학생 행 형식: [번호] [이름] [숫자×18]
