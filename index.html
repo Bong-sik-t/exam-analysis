@@ -2481,9 +2481,14 @@ async function parseOfficialScorePdf(file) {
 
     // 반 번호 추출
     const compact = rows.flat().join('').replace(/\s+/g, '');
+    console.log('[PDF] 페이지', pn, '전체행수:', rows.length, 'compact앞50:', compact.slice(0,50));
     const classMatch = compact.match(/1(\d+)[가-힣]+고등학교/);
-    if (!classMatch) continue;
+    if (!classMatch) {
+      console.log('[PDF] 반번호 패턴 불일치 - compact:', compact.slice(0,100));
+      continue;
+    }
     const classNum = parseInt(classMatch[1]);
+    console.log('[PDF] 반번호:', classNum);
 
     // 각 행을 검사하여 학생 데이터 파싱
     // 학생 행 형식: [번호] [이름] [숫자×18]
