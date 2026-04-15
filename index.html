@@ -2472,6 +2472,7 @@ async function handleOfficialScorePdf(event) {
         statusEl.className = 'upload-status success';
         statusEl.textContent = `✅ ${students.length}명 공식 성적 입력 완료`;
         showToast(`${students.length}명 처리됐습니다`, 'success');
+        autoSaveToGas();
         return;
       }
     }
@@ -2921,6 +2922,7 @@ function parseExcel(workbook) {
     `;
   }
   showToast(`${count}명 학생 데이터가 로드되었습니다.`, 'success');
+  autoSaveToGas();
 }
 
 // ============================================================
@@ -4023,6 +4025,45 @@ async function testGasConnection() {
 // ============================================================
 // 구글시트 저장 / 불러오기
 // ============================================================
+
+// 업로드 직후 자동 GAS 저장 (GAS URL이 없으면 무시)
+async function autoSaveToGas() {
+  const url = state.settings.gasUrl;
+  if (!url) return;
+  try {
+    saveCurrentToExam();
+    const payload = {
+      action: 'saveStudents',
+      students: state.students,
+      correctAnswers: state.correctAnswers,
+      studentAnswers: state.studentAnswers,
+      birthdates: state.birthdates,
+      defaultPassword: state.defaultPassword,
+      birthdateMode: state.birthdateMode,
+      examInfo: state.examInfo,
+      teachers: state.teachers,
+      numClasses: state.numClasses,
+      settings: { subjectPdfUrls: state.settings.subjectPdfUrls, pdfPageConfig: state.settings.pdfPageConfig },
+      exams: state.exams,
+      currentExam: state.currentExam,
+    };
+    const resp = await fetch(url, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload),
+    });
+    const json = await resp.json();
+    if (json.success) {
+      showToast('☁ 구글시트 자동 저장 완료', 'success');
+    } else {
+      showToast('⚠️ 구글시트 자동 저장 실패 — 수동으로 저장해주세요', 'error');
+    }
+  } catch(e) {
+    showToast('⚠️ 구글시트 자동 저장 실패 — 수동으로 저장해주세요', 'error');
+    console.warn('autoSaveToGas error:', e);
+  }
+}
+
 async function saveToGoogleSheets() {
   const url = state.settings.gasUrl;
   if (!url) { showToast('GAS URL을 먼저 설정하세요.', 'error'); return; }
@@ -4066,13 +4107,7 @@ async function saveToGoogleSheets() {
 async function autoLoadFromGas() {
   const url = state.settings.gasUrl;
   if (!url) return;
-  // 로컬스토리지에 데이터가 이미 있으면 GAS로 덮어쓰지 않음
-  // (GAS 자동 로드는 로컬이 비어 있을 때만 — 예: 학생 기기 첫 접속)
-  const hasLocalData = Object.values(state.exams).some(e =>
-    (e.가채점 && e.가채점.students && e.가채점.students.length > 0) ||
-    (e.공식  && e.공식.students  && e.공식.students.length  > 0)
-  );
-  if (hasLocalData) return;
+  // 업로드 시 자동으로 GAS에 저장하므로 GAS가 항상 최신 — 매번 로드해도 안전
   const notice = document.getElementById('home-gas-notice');
   if (notice) { notice.textContent = '⏳ 데이터 불러오는 중...'; notice.style.display = 'block'; }
   try {
