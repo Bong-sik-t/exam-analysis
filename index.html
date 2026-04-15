@@ -4133,21 +4133,32 @@ async function autoLoadFromGas() {
       // 멀티 시험 구조 처리
       if (json.exams && Object.keys(json.exams).length > 0) {
         state.exams = json.exams;
+        migrateExamStructure();
         state.currentExam = json.currentExam || Object.keys(json.exams)[0];
-        loadExamToState(state.currentExam);
+        loadExamToState(state.currentExam, json.currentMode || '가채점');
       } else {
         const examKey = (json.examInfo && json.examInfo.exam) || '3월';
         state.exams = {};
         state.exams[examKey] = {
-          students: json.students, correctAnswers: json.correctAnswers || {},
-          studentAnswers: json.studentAnswers || {}, birthdates: json.birthdates || {},
-          defaultPassword: json.defaultPassword || '000000', birthdateMode: json.birthdateMode || 'default',
-          examInfo: json.examInfo || { year: '2026', grade: '1', exam: examKey }
+          가채점: { students: json.students, correctAnswers: json.correctAnswers || {},
+            studentAnswers: json.studentAnswers || {},
+            examInfo: json.examInfo || { year: '2026', grade: '1', exam: examKey } },
+          공식: null, gradeCuts: {},
+          birthdates: json.birthdates || {},
+          defaultPassword: json.defaultPassword || '000000',
+          birthdateMode: json.birthdateMode || 'default',
         };
         state.currentExam = examKey;
+        loadExamToState(state.currentExam, '가채점');
       }
       saveToStorage();
-      if (notice) { notice.textContent = `✅ ${json.students.length}명 데이터 로드됨`; }
+      if (notice) { notice.textContent = `✅ ${json.students.length}명 데이터 로드됨`; notice.style.color = 'var(--success)'; }
+      // 관리자 화면이 열려 있으면 즉시 UI 갱신
+      if (document.getElementById('teacher') && document.getElementById('teacher').classList.contains('active')) {
+        renderExamTabs();
+        renderStudentTable(state.students);
+        updateExamInfo();
+      }
     } else {
       if (notice) { notice.textContent = `⚠️ 구글시트에 저장된 데이터가 없습니다. 관리자가 먼저 저장해야 합니다.`; }
     }
