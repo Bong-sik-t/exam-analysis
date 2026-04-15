@@ -4066,6 +4066,13 @@ async function saveToGoogleSheets() {
 async function autoLoadFromGas() {
   const url = state.settings.gasUrl;
   if (!url) return;
+  // 로컬스토리지에 데이터가 이미 있으면 GAS로 덮어쓰지 않음
+  // (GAS 자동 로드는 로컬이 비어 있을 때만 — 예: 학생 기기 첫 접속)
+  const hasLocalData = Object.values(state.exams).some(e =>
+    (e.가채점 && e.가채점.students && e.가채점.students.length > 0) ||
+    (e.공식  && e.공식.students  && e.공식.students.length  > 0)
+  );
+  if (hasLocalData) return;
   const notice = document.getElementById('home-gas-notice');
   if (notice) { notice.textContent = '⏳ 데이터 불러오는 중...'; notice.style.display = 'block'; }
   try {
