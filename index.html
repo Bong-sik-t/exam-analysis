@@ -4447,6 +4447,19 @@ function renderScoreTable(student) {
   }
   const isOfficial = state.currentMode === '공식';
 
+  // 공식 모드에서는 문항분석 탭 숨김, 가채점 모드에서는 표시
+  const tabNav = document.querySelector('.tab-nav');
+  if (tabNav) {
+    const itemTabBtn = tabNav.querySelectorAll('.tab-btn')[1]; // 문항분석 버튼
+    if (itemTabBtn) {
+      itemTabBtn.style.display = isOfficial ? 'none' : '';
+      // 공식 모드인데 문항분석이 활성화돼 있으면 성적표로 전환
+      if (isOfficial && itemTabBtn.classList.contains('active')) {
+        switchTab('성적표');
+      }
+    }
+  }
+
   // 헤더 동적 렌더링
   const thead = document.getElementById('score-detail-thead');
   if (thead) {
