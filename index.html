@@ -5114,20 +5114,33 @@ function generateSampleData() {
     return 9;
   }
 
-  // 문항 정오 생성 (틀린 문항 = 해당 등급 기반)
-  function genAnswers(scores, examName, code) {
-    const r = seededRand(parseInt(code));
-    const ans = {};
+  // 정답 배열 생성 (과목별, 1~5 숫자)
+  const CORRECT_ANSWERS = {};
+  const Q_COUNTS = { 국어: 45, 수학: 30, 영어: 45, 한국사: 20, 사탐: 25, 과탐: 25 };
+  for (const [subj, cnt] of Object.entries(Q_COUNTS)) {
+    CORRECT_ANSWERS[subj] = Array.from({ length: cnt }, (_, i) => String((i % 5) + 1));
+  }
+
+  // 학생 답안 생성: { '국어': { '10101': [3,1,4,...] }, '수학': { ... } }
+  function genSubjectAnswers(students, examName) {
     const wrongRates = { 1: 0.05, 2: 0.12, 3: 0.2, 4: 0.3, 5: 0.42, 6: 0.55, 7: 0.65, 8: 0.75, 9: 0.85 };
-    const qCounts = { 국어: 45, 수학: 30, 영어: 45, 한국사: 20 };
-    for (const [subj, cnt] of Object.entries(qCounts)) {
-      const grade = calcGrade(subj, scores[subj], examName);
-      const wr = wrongRates[grade] || 0.3;
-      for (let i = 1; i <= cnt; i++) {
-        ans[`${subj}_${i}`] = r() < wr ? 'wrong' : 'correct';
+    const result = {};
+    for (const subj of Object.keys(Q_COUNTS)) result[subj] = {};
+    for (const s of students) {
+      const r = seededRand(parseInt(s.code));
+      for (const [subj, cnt] of Object.entries(Q_COUNTS)) {
+        const grade = calcGrade(subj, s.scores[subj] || 0, examName);
+        const wr = wrongRates[grade] || 0.3;
+        const correct = CORRECT_ANSWERS[subj];
+        result[subj][s.code] = Array.from({ length: cnt }, (_, i) => {
+          if (r() < wr) {
+            return String((parseInt(correct[i]) % 5) + 1); // 오답
+          }
+          return correct[i]; // 정답
+        });
       }
     }
-    return ans;
+    return result;
   }
 
   // 학생 목록 생성
@@ -5170,15 +5183,9 @@ function generateSampleData() {
       }
     }
 
-    const makeAnswers = (students) => {
-      const obj = {};
-      students.forEach(s => { obj[s.code] = genAnswers(s.scores, examName, s.code); });
-      return obj;
-    };
-
     exams[examName] = {
-      가채점: { students: gaejomStudents, correctAnswers: {}, studentAnswers: makeAnswers(gaejomStudents), examInfo: { year: '2026', grade: '1', exam: examName } },
-      공식:   { students: officialStudents, correctAnswers: {}, studentAnswers: makeAnswers(officialStudents), examInfo: { year: '2026', grade: '1', exam: examName } },
+      가채점: { students: gaejomStudents, correctAnswers: CORRECT_ANSWERS, studentAnswers: genSubjectAnswers(gaejomStudents, examName), examInfo: { year: '2026', grade: '1', exam: examName } },
+      공식:   { students: officialStudents, correctAnswers: CORRECT_ANSWERS, studentAnswers: genSubjectAnswers(officialStudents, examName), examInfo: { year: '2026', grade: '1', exam: examName } },
       gradeCuts: cuts,
       birthdates: {}, defaultPassword: '000000', birthdateMode: 'default',
     };
