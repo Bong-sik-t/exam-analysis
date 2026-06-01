@@ -1811,7 +1811,11 @@ let state = {
 // INIT
 // ============================================================
 window.addEventListener('load', () => {
-  loadFromStorage();
+  if (typeof IS_SAMPLE_SITE !== 'undefined' && IS_SAMPLE_SITE) {
+    injectSampleData();
+  } else {
+    loadFromStorage();
+  }
   loadAllPdfsFromIDB();
   populateTeacherSelect();
   applyNumClasses();
@@ -1819,12 +1823,12 @@ window.addEventListener('load', () => {
   // URL 파라미터에서 GAS URL 자동 설정 (학생용 링크로 접속 시)
   const params = new URLSearchParams(window.location.search);
   const gasParam = params.get('gas');
-  if (gasParam) {
+  if (gasParam && !(typeof IS_SAMPLE_SITE !== 'undefined' && IS_SAMPLE_SITE)) {
     state.settings.gasUrl = decodeURIComponent(gasParam);
     saveToStorage();
   }
-  // GAS URL이 있으면 자동으로 데이터 불러오기
-  if (state.settings.gasUrl) {
+  // GAS URL이 있으면 자동으로 데이터 불러오기 (샘플 사이트는 GAS 없음)
+  if (state.settings.gasUrl && !(typeof IS_SAMPLE_SITE !== 'undefined' && IS_SAMPLE_SITE)) {
     const el = document.getElementById('login-gas-load');
     if (el) el.style.display = 'block';
     autoLoadFromGas();
@@ -5041,6 +5045,170 @@ function showToast(msg, type = '') {
   toast.textContent = msg;
   toast.className = 'toast show ' + type;
   setTimeout(() => { toast.classList.remove('show'); }, 3000);
+}
+
+// ============================================================
+// SAMPLE SITE — 공모전 제출용 샘플 데이터 (sample 브랜치 전용)
+// main 브랜치에는 존재하지 않음
+// ============================================================
+const IS_SAMPLE_SITE = true;
+
+function generateSampleData() {
+  // 고전 소설 인물 60명 (3반 × 20명)
+  const namesByClass = {
+    1: ['홍길동','성춘향','이몽룡','심청','변학도','방자','향단','흥부','전우치','허생',
+        '임경업','유충렬','조웅','최척','운영','장화','홍련','콩쥐','배비장','이춘풍'],
+    2: ['양소유','성진','이시백','옥영','숙향','이선','계월','도화','황진이','심봉사',
+        '놀부','옹고집','팥쥐','별주부','김진사','사씨','교씨','윤지경','숙영','정수정'],
+    3: ['박문수','임꺽정','장길산','광문','민옹','허웅','금방울','은방울','계섬','어화',
+        '양생','교채란','박씨','강릉매','월향','이화','자라','토끼','수궁왕','천상계'],
+  };
+
+  // 학생별 고정 능력치 (시드 기반 — 재현 가능하도록)
+  function seededRand(seed) {
+    let s = seed;
+    return function() { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  }
+
+  // 과목 원점수 생성 (능력치 0~1 기반)
+  function genScores(ability, exam) {
+    const boost = exam === '3월' ? 0 : exam === '6월' ? 0.05 : 0.1;
+    const a = Math.min(1, ability + boost);
+    const r = seededRand(Math.floor(ability * 997 + exam.charCodeAt(0)));
+    function sc(min, max) { return Math.round(min + (max - min) * (a * 0.7 + r() * 0.3)); }
+    return {
+      국어:   sc(35, 100),
+      수학:   sc(20, 100),
+      영어:   sc(35, 100),
+      한국사: sc(20, 50),
+      사탐:   sc(18, 50),
+      과탐:   sc(18, 50),
+    };
+  }
+
+  // 원점수 → 표준점수 (국어/수학/사탐/과탐만, 영어·한국사는 절대평가)
+  function toStd(subject, raw) {
+    const maxMap = { 국어: 100, 수학: 100, 사탐: 50, 과탐: 50 };
+    const meanMap = { 국어: 65, 수학: 55, 사탐: 33, 과탐: 31 };
+    const stdMap  = { 국어: 18, 수학: 22, 사탐: 8,  과탐: 7  };
+    if (!maxMap[subject]) return null;
+    return Math.round(100 + 20 * (raw - meanMap[subject]) / stdMap[subject]);
+  }
+
+  // 표준점수 → 백분위 (정규분포 근사)
+  function toPct(std) {
+    const z = (std - 100) / 20;
+    const pct = Math.round(50 * (1 + Math.sign(z) * (1 - Math.exp(-Math.abs(z) * (0.8 + 0.2 * Math.abs(z))))));
+    return Math.max(1, Math.min(99, pct));
+  }
+
+  // 등급 계산
+  const CUTS_3 = { 국어:[86,79,70,60,48,38,29,20], 수학:[83,71,61,51,39,28,19,13], 영어:[90,80,70,60,50,40,30,20], 한국사:[40,35,30,25,20,15,10,5], 사탐:[46,42,38,32,25,19,13,8], 과탐:[42,38,31,25,19,13,10,7] };
+  const CUTS_6 = { 국어:[88,81,72,62,50,40,31,22], 수학:[85,73,63,53,41,30,21,15], 영어:[90,80,70,60,50,40,30,20], 한국사:[40,35,30,25,20,15,10,5], 사탐:[47,43,39,33,26,20,14,9], 과탐:[43,39,32,26,20,14,11,8] };
+  const CUTS_9 = { 국어:[90,83,74,64,52,42,33,24], 수학:[87,75,65,55,43,32,23,17], 영어:[90,80,70,60,50,40,30,20], 한국사:[40,35,30,25,20,15,10,5], 사탐:[48,44,40,34,27,21,15,10], 과탐:[44,40,33,27,21,15,12,9] };
+  const CUTS_BY_EXAM = { '3월': CUTS_3, '6월': CUTS_6, '9월': CUTS_9 };
+
+  function calcGrade(subject, raw, examName) {
+    const cuts = (CUTS_BY_EXAM[examName] || CUTS_3)[subject] || [];
+    for (let g = 0; g < cuts.length; g++) { if (raw >= cuts[g]) return g + 1; }
+    return 9;
+  }
+
+  // 문항 정오 생성 (틀린 문항 = 해당 등급 기반)
+  function genAnswers(scores, examName, code) {
+    const r = seededRand(parseInt(code));
+    const ans = {};
+    const wrongRates = { 1: 0.05, 2: 0.12, 3: 0.2, 4: 0.3, 5: 0.42, 6: 0.55, 7: 0.65, 8: 0.75, 9: 0.85 };
+    const qCounts = { 국어: 45, 수학: 30, 영어: 45, 한국사: 20 };
+    for (const [subj, cnt] of Object.entries(qCounts)) {
+      const grade = calcGrade(subj, scores[subj], examName);
+      const wr = wrongRates[grade] || 0.3;
+      for (let i = 1; i <= cnt; i++) {
+        ans[`${subj}_${i}`] = r() < wr ? 'wrong' : 'correct';
+      }
+    }
+    return ans;
+  }
+
+  // 학생 목록 생성
+  const allStudents = [];
+  for (const [cls, names] of Object.entries(namesByClass)) {
+    names.forEach((name, idx) => {
+      const num = String(idx + 1).padStart(2, '0');
+      const code = `1${String(cls).padStart(2,'0')}${num}`;
+      const ability = 0.2 + (idx / names.length) * 0.6 + (Math.sin(parseInt(code)) * 0.15);
+      allStudents.push({ code, name, grade: '1', class: String(cls), number: num, ability });
+    });
+  }
+
+  // 시험별 데이터 생성
+  const exams = {};
+  for (const examName of ['3월', '6월', '9월']) {
+    const cuts = CUTS_BY_EXAM[examName];
+
+    const makeStudents = (isOfficial) => allStudents.map(s => {
+      const sc = genScores(s.ability, examName);
+      const total = Object.values(sc).reduce((a,b) => a+b, 0);
+      const 표준점수 = { 국어: toStd('국어', sc.국어), 수학: toStd('수학', sc.수학), 영어: null, 한국사: null, 사탐: toStd('사탐', sc.사탐), 과탐: toStd('과탐', sc.과탐) };
+      const 백분위 = {};
+      for (const [k,v] of Object.entries(표준점수)) { 백분위[k] = v ? toPct(v) : null; }
+      const 공식등급 = {};
+      for (const subj of ['국어','수학','영어','한국사','사탐','과탐']) {
+        공식등급[subj] = calcGrade(subj, sc[subj], examName);
+      }
+      return { code: s.code, name: s.name, grade: s.grade, class: s.class, number: s.number, scores: sc, total, 표준점수, 백분위, 공식등급 };
+    });
+
+    const gaejomStudents = makeStudents(false);
+    const officialStudents = makeStudents(true);
+
+    // 반별 석차 계산
+    for (const list of [gaejomStudents, officialStudents]) {
+      for (let c = 1; c <= 3; c++) {
+        const cs = list.filter(s => s.class === String(c)).sort((a,b) => b.total - a.total);
+        cs.forEach((s,i) => { s.rank = i + 1; });
+      }
+    }
+
+    const makeAnswers = (students) => {
+      const obj = {};
+      students.forEach(s => { obj[s.code] = genAnswers(s.scores, examName, s.code); });
+      return obj;
+    };
+
+    exams[examName] = {
+      가채점: { students: gaejomStudents, correctAnswers: {}, studentAnswers: makeAnswers(gaejomStudents), examInfo: { year: '2026', grade: '1', exam: examName } },
+      공식:   { students: officialStudents, correctAnswers: {}, studentAnswers: makeAnswers(officialStudents), examInfo: { year: '2026', grade: '1', exam: examName } },
+      gradeCuts: cuts,
+      birthdates: {}, defaultPassword: '000000', birthdateMode: 'default',
+    };
+  }
+
+  return {
+    exams,
+    currentExam: '3월',
+    currentMode: '공식',
+    numClasses: 3,
+    adminPassword: '1234',
+    teachers: [
+      { classNum: 1, name: '1반 담임', password: 'teacher1' },
+      { classNum: 2, name: '2반 담임', password: 'teacher2' },
+      { classNum: 3, name: '3반 담임', password: 'teacher3' },
+    ],
+    settings: { gasUrl: '', subjectPdfUrls: {}, pdfPageConfig: {} },
+    birthdateMode: 'default',
+    defaultPassword: '000000',
+    googleAccounts: {},
+    parentData: {},
+    customCuts: {},
+  };
+}
+
+function injectSampleData() {
+  const data = generateSampleData();
+  Object.assign(state, data);
+  // 현재 시험 상태 로드
+  if (state.exams['3월']) loadExamToState('3월', '공식');
 }
 </script>
 </body>
