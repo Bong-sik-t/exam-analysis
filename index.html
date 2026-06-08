@@ -4125,6 +4125,8 @@ async function saveToGoogleSheets() {
       settings: { subjectPdfUrls: state.settings.subjectPdfUrls, pdfPageConfig: state.settings.pdfPageConfig },
       exams: (() => { saveCurrentToExam(); return state.exams; })(),
       currentExam: state.currentExam,
+      googleAccounts: state.googleAccounts,
+      parentData: state.parentData,
     };
     const resp = await fetch(url, {
       method: 'POST',
