@@ -4156,7 +4156,17 @@ async function autoLoadFromGas() {
     let json;
     try { json = JSON.parse(text); }
     catch(e) { throw new Error('응답 파싱 오류 — GAS 배포 설정을 확인하세요 (액세스: 모든 사람)'); }
-    if (json.students && json.students.length > 0) {
+    // googleAccounts/parentData는 students 유무와 무관하게 항상 로드
+    if (json.googleAccounts && Object.keys(json.googleAccounts).length > 0) {
+      state.googleAccounts = { ...state.googleAccounts, ...json.googleAccounts };
+      saveToStorage();
+    }
+    if (json.parentData && Object.keys(json.parentData).length > 0) {
+      state.parentData = { ...state.parentData, ...json.parentData };
+    }
+    // exams 구조 또는 students 배열이 있으면 데이터 로드
+    const hasData = (json.exams && Object.keys(json.exams).length > 0) || (json.students && json.students.length > 0);
+    if (hasData) {
       state.students        = json.students;
       state.correctAnswers  = json.correctAnswers || {};
       state.studentAnswers  = json.studentAnswers || {};
@@ -4170,8 +4180,6 @@ async function autoLoadFromGas() {
         if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
         if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
       }
-      if (json.googleAccounts && Object.keys(json.googleAccounts).length > 0) state.googleAccounts = { ...state.googleAccounts, ...json.googleAccounts };
-      if (json.parentData && Object.keys(json.parentData).length > 0) state.parentData = { ...state.parentData, ...json.parentData };
       // 멀티 시험 구조 처리
       if (json.exams && Object.keys(json.exams).length > 0) {
         state.exams = json.exams;
@@ -4226,7 +4234,17 @@ async function loadFromGoogleSheets(isLoginMode = false) {
   try {
     const resp = await fetch(url + '?action=getStudents', { mode: 'cors' });
     const json = await resp.json();
-    if (json.students && json.students.length > 0) {
+    // googleAccounts/parentData는 students 유무와 무관하게 항상 로드
+    if (json.googleAccounts && Object.keys(json.googleAccounts).length > 0) {
+      state.googleAccounts = { ...state.googleAccounts, ...json.googleAccounts };
+      saveToStorage();
+    }
+    if (json.parentData && Object.keys(json.parentData).length > 0) {
+      state.parentData = { ...state.parentData, ...json.parentData };
+    }
+    // exams 구조 또는 students 배열이 있으면 데이터 로드
+    const hasData = (json.exams && Object.keys(json.exams).length > 0) || (json.students && json.students.length > 0);
+    if (hasData) {
       state.students       = json.students;
       state.correctAnswers = json.correctAnswers || {};
       state.studentAnswers = json.studentAnswers || {};
@@ -4238,8 +4256,6 @@ async function loadFromGoogleSheets(isLoginMode = false) {
         if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
         if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
       }
-      if (json.googleAccounts && Object.keys(json.googleAccounts).length > 0) state.googleAccounts = { ...state.googleAccounts, ...json.googleAccounts };
-      if (json.parentData && Object.keys(json.parentData).length > 0) state.parentData = { ...state.parentData, ...json.parentData };
       // 멀티 시험 구조 처리
       if (json.exams && Object.keys(json.exams).length > 0) {
         state.exams = json.exams;
