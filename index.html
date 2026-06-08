@@ -1733,7 +1733,10 @@ async function handleGoogleLogin() {
     // 구글 계정 → 학번 매핑
     const hakbeon = state.googleAccounts[email] || state.googleAccounts[email.split('@')[0]];
     if (!hakbeon) {
-      showToast('등록되지 않은 구글 계정입니다. 담임선생님께 문의하세요.', 'error');
+      const _cnt = Object.keys(state.googleAccounts).length;
+      const _sample = Object.keys(state.googleAccounts).slice(0,2).join(' / ');
+      showToast('미등록 계정: ' + email + ' | 등록수: ' + _cnt + '개' + (_sample ? ' | 예시: ' + _sample : ''), 'error');
+      console.warn('[login debug]', { email, count: _cnt, sample: _sample, googleAccounts: state.googleAccounts });
       await firebaseAuth.signOut();
       return;
     }
