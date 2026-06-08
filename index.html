@@ -1995,6 +1995,10 @@ function selectAdminExam(name) {
   renderExamTabs();
   renderStudentTable(state.students);
   updateExamInfo();
+  renderCurrentGradeCuts();
+  const manualArea = document.getElementById('manual-cut-area');
+  if (manualArea && manualArea.style.display !== 'none') renderManualCutGrid();
+  loadAllPdfsFromIDB();
   saveToStorage();
 }
 
