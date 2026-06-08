@@ -1269,6 +1269,19 @@
             <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ocr-confirm-area').style.display='none'">취소</button>
           </div>
         </div>
+        <!-- 수동 입력 -->
+        <div style="margin-top:14px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="font-size:12px;font-weight:700;color:var(--gray-500);">직접 입력</div>
+            <button class="btn btn-secondary btn-sm" onclick="toggleManualCutInput()" id="manual-cut-toggle">✏️ 펼치기</button>
+          </div>
+          <div id="manual-cut-area" style="display:none;background:#F8FAFC;border:1px solid var(--gray-200);border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">각 과목의 등급컷을 1등급~8등급 순서로 입력하세요 (쉼표 구분)</div>
+            <div id="manual-cut-grid" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="saveManualCuts()">💾 저장</button>
+            <span id="manual-cut-status" style="font-size:12px;margin-left:8px;color:var(--success);"></span>
+          </div>
+        </div>
         <!-- 현재 등급컷 표시 -->
         <div style="margin-top:14px;">
           <div style="font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">현재 등록된 등급컷</div>
@@ -1821,8 +1834,8 @@ let state = {
   adminPassword: '1234',
   numClasses: 7,
   teachers: [],   // [{classNum:1, name:'', password:''}]
-  pdfUrls: {},    // {subject: objectURL} - session memory
-  pdfMeta: {},    // {subject: {name:'...'}}
+  pdfUrls: {},    // {examName: {subject: objectURL}} - session memory
+  pdfMeta: {},    // {examName: {subject: {name:'...'}}}
   currentTeacher: null,  // {classNum, name}
   currentViewerRole: 'student', // 'admin'|'classTeacher'|'student'
   isParentView: false,
@@ -2253,6 +2266,52 @@ function saveOcrGradeCuts() {
   showToast(subject + ' 등급컷이 저장됐습니다', 'success');
 }
 
+function toggleManualCutInput() {
+  const area = document.getElementById('manual-cut-area');
+  const btn  = document.getElementById('manual-cut-toggle');
+  if (!area) return;
+  const open = area.style.display === 'none';
+  area.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? '✏️ 접기' : '✏️ 펼치기';
+  if (open) renderManualCutGrid();
+}
+
+function renderManualCutGrid() {
+  const grid = document.getElementById('manual-cut-grid');
+  if (!grid) return;
+  const allCuts = { ...DEFAULT_CUTS, ...(state.customCuts || {}) };
+  grid.innerHTML = SUBJECTS.map(subj => {
+    const cuts = allCuts[subj] || [,,,,,,, ].map((_,i)=>'');
+    return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:13px;font-weight:700;color:var(--gray-700);min-width:40px;">${subj}</span>
+      <input id="manual-cut-${subj}" type="text" class="form-control"
+        style="flex:1;min-width:200px;font-size:13px;"
+        placeholder="예: 86,79,70,60,48,38,29,20"
+        value="${cuts.slice(0,8).join(',')}">
+    </div>`;
+  }).join('');
+}
+
+function saveManualCuts() {
+  let saved = 0;
+  SUBJECTS.forEach(subj => {
+    const input = document.getElementById('manual-cut-' + subj);
+    if (!input || !input.value.trim()) return;
+    const cuts = input.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+    if (cuts.length === 0) return;
+    if (!state.customCuts) state.customCuts = {};
+    state.customCuts[subj] = cuts;
+    if (state.currentExam && state.exams[state.currentExam]) {
+      if (!state.exams[state.currentExam].gradeCuts) state.exams[state.currentExam].gradeCuts = {};
+      state.exams[state.currentExam].gradeCuts[subj] = cuts;
+    }
+    saved++;
+  });
+  saveToStorage();
+  renderCurrentGradeCuts();
+  const st = document.getElementById('manual-cut-status');
+  if (st) { st.textContent = `✅ ${saved}개 과목 저장됨`; setTimeout(() => { st.textContent = ''; }, 2500); }
+}
 function renderCurrentGradeCuts() {
   const el = document.getElementById('current-grade-cuts-display');
   if (!el) return;
@@ -3691,13 +3750,35 @@ async function loadPdfFromDB(subject) {
   } catch(e) { return null; }
 }
 
+function examPdfUrls() {
+  const exam = state.currentExam;
+  if (!exam) return {};
+  if (!state.pdfUrls[exam]) state.pdfUrls[exam] = {};
+  return state.pdfUrls[exam];
+}
+function examPdfMeta() {
+  const exam = state.currentExam;
+  if (!exam) return {};
+  if (!state.pdfMeta[exam]) state.pdfMeta[exam] = {};
+  return state.pdfMeta[exam];
+}
+
 async function loadAllPdfsFromIDB() {
+  const exam = state.currentExam;
+  if (!exam) return;
+  SUBJECTS.forEach(subj => {
+    const slot = document.getElementById('pdf-slot-' + subj);
+    const status = document.getElementById('pdf-status-' + subj);
+    if (slot) slot.classList.remove('loaded');
+    if (status) status.textContent = '미업로드';
+  });
   for (const subj of SUBJECTS) {
-    const blob = await loadPdfFromDB(subj);
+    const blob = await loadPdfFromDB(exam + '_' + subj);
     if (blob) {
-      if (state.pdfUrls[subj]) URL.revokeObjectURL(state.pdfUrls[subj]);
-      state.pdfUrls[subj] = URL.createObjectURL(blob);
-      state.pdfMeta[subj] = { name: blob.name || (subj + '.pdf'), size: blob.size };
+      const urls = examPdfUrls();
+      if (urls[subj]) URL.revokeObjectURL(urls[subj]);
+      urls[subj] = URL.createObjectURL(blob);
+      examPdfMeta()[subj] = { name: blob.name || (subj + '.pdf'), size: blob.size };
       updatePdfSlotUI(subj, blob.name || (subj + '.pdf'));
     }
   }
@@ -3716,10 +3797,12 @@ async function handlePdfUpload(e) {
   e.target.value = '';
   _pendingPdfSubject = null;
   try {
-    await savePdfToDB(subj, file);
-    if (state.pdfUrls[subj]) URL.revokeObjectURL(state.pdfUrls[subj]);
-    state.pdfUrls[subj] = URL.createObjectURL(file);
-    state.pdfMeta[subj] = { name: file.name, size: file.size };
+    const pdfKey = (state.currentExam || '') + '_' + subj;
+    await savePdfToDB(pdfKey, file);
+    const urls = examPdfUrls();
+    if (urls[subj]) URL.revokeObjectURL(urls[subj]);
+    urls[subj] = URL.createObjectURL(file);
+    examPdfMeta()[subj] = { name: file.name, size: file.size };
     updatePdfSlotUI(subj, file.name);
     showToast(`${subj} 문제지 업로드 완료`, 'success');
   } catch(err) {
@@ -3830,7 +3913,7 @@ function showQStats(subject, qNum, myAnswer) {
 
   // PDF 버튼 (전체 보기용)
   const pdfBtn = document.getElementById('qstats-pdf-btn');
-  pdfBtn.style.display = state.pdfUrls && state.pdfUrls[subject] ? 'block' : 'none';
+  pdfBtn.style.display = examPdfUrls()[subject] ? 'block' : 'none';
 
   document.getElementById('qstats-modal').classList.add('open');
 
@@ -3870,7 +3953,7 @@ async function renderQPdfPage(subject, qNum) {
 
   const cfg       = ((state.settings || {}).pdfPageConfig || {})[subject] || {};
   const publicUrl = ((state.settings || {}).subjectPdfUrls || {})[subject] || '';
-  const localUrl  = (state.pdfUrls || {})[subject] || '';
+  const localUrl  = examPdfUrls()[subject] || '';
 
   if (!publicUrl && !localUrl) return; // PDF 없으면 숨김 유지
 
@@ -4019,7 +4102,7 @@ document.addEventListener('click', function(e) {
 });
 
 function openPdfViewer(subject) {
-  const url = state.pdfUrls[subject];
+  const url = examPdfUrls()[subject];
   if (!url) { showToast(`${subject} 문제지가 업로드되지 않았습니다.`, 'error'); return; }
   const modal = document.getElementById('pdf-modal');
   const iframe = document.getElementById('pdf-modal-iframe');
@@ -4918,7 +5001,7 @@ function renderWrongAnswers(student, subject) {
   const correctRate = dataCount > 0 ? Math.round(((dataCount - wrongCount) / dataCount) * 100) : 0;
   const wrongQuestions = qResults.filter(q => q.status === 'wrong').map(q => q.num);
 
-  const pdfBtn = state.pdfUrls[subject]
+  const pdfBtn = examPdfUrls()[subject]
     ? `<button class="pdf-view-btn" onclick="openPdfViewer('${subject}')">📄 ${subject} 문제지 보기</button>`
     : '';
 
@@ -4943,7 +5026,7 @@ function renderWrongAnswers(student, subject) {
       <div class="q-circles">
   `;
 
-  const hasPdf = !!state.pdfUrls[subject];
+  const hasPdf = !!examPdfUrls()[subject];
   for (const q of qResults) {
     const cls = q.status === 'correct' ? 'q-correct' : q.status === 'wrong' ? 'q-wrong' : 'q-nodata';
     const shortLabel = q.isShortAnswer ? '<span class="q-label-short">단답형</span>' : '';
