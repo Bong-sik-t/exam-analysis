@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -1706,7 +1706,27 @@ function findStudentForLogin(code) {
   return null;
 }
 
+function isInAppBrowser() {
+  const ua = navigator.userAgent || "";
+  return /KAKAOTALK|NAVER|Instagram|FB_IAB|FBAN|Line\/|wv\)|WebView/i.test(ua)
+      || ((/Android/i.test(ua)) && /Version\/[\d.]+.*Chrome\/[\d.]+/i.test(ua) && !/SamsungBrowser/i.test(ua) && !/OPR/i.test(ua) && !/EdgA/i.test(ua));
+}
+
 async function handleGoogleLogin() {
+  if (isInAppBrowser()) {
+    const msg = document.createElement("div");
+    msg.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
+    msg.innerHTML = '<div style="background:white;border-radius:16px;padding:28px 24px;max-width:360px;text-align:center;">'
+      + '<div style="font-size:40px;margin-bottom:12px;">⚠️</div>'
+      + '<div style="font-size:17px;font-weight:700;color:#111;margin-bottom:12px;">앱 내 브라우저에서는<br>구글 로그인이 차단됩니다</div>'
+      + '<div style="font-size:14px;color:#555;line-height:1.6;margin-bottom:20px;">카카오톡, 문자 등에서 열린 경우<br><b>Chrome 브라우저</b>로 이 주소를<br>직접 열어주세요.</div>'
+      + '<div style="background:#f1f5f9;border-radius:8px;padding:10px;font-size:12px;color:#333;word-break:break-all;margin-bottom:18px;">' + location.href + '</div>'
+      + '<button onclick="if(navigator.clipboard){navigator.clipboard.writeText(location.href).then(()=>{this.textContent=\'주소 복사됨!\';this.style.background=\'#34A853\';})}return false;" style="width:100%;padding:12px;background:#4285F4;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">주소 복사하기</button>'
+      + '<button onclick="this.closest(\'div[style]\').parentElement.remove()" style="width:100%;padding:10px;background:#f1f5f9;color:#333;border:none;border-radius:8px;font-size:14px;cursor:pointer;">닫기</button>'
+      + '</div>';
+    document.body.appendChild(msg);
+    return;
+  }
   try {
     const result = await firebaseAuth.signInWithPopup(googleProvider);
     const email = result.user.email.toLowerCase();
@@ -4130,6 +4150,8 @@ async function autoLoadFromGas() {
         if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
         if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
       }
+      if (json.googleAccounts && Object.keys(json.googleAccounts).length > 0) state.googleAccounts = { ...state.googleAccounts, ...json.googleAccounts };
+      if (json.parentData && Object.keys(json.parentData).length > 0) state.parentData = { ...state.parentData, ...json.parentData };
       // 멀티 시험 구조 처리
       if (json.exams && Object.keys(json.exams).length > 0) {
         state.exams = json.exams;
@@ -4196,6 +4218,8 @@ async function loadFromGoogleSheets(isLoginMode = false) {
         if (json.settings.subjectPdfUrls) state.settings.subjectPdfUrls = json.settings.subjectPdfUrls;
         if (json.settings.pdfPageConfig)  state.settings.pdfPageConfig  = json.settings.pdfPageConfig;
       }
+      if (json.googleAccounts && Object.keys(json.googleAccounts).length > 0) state.googleAccounts = { ...state.googleAccounts, ...json.googleAccounts };
+      if (json.parentData && Object.keys(json.parentData).length > 0) state.parentData = { ...state.parentData, ...json.parentData };
       // 멀티 시험 구조 처리
       if (json.exams && Object.keys(json.exams).length > 0) {
         state.exams = json.exams;
