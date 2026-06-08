@@ -1695,9 +1695,13 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // 모바일 리다이렉트 로그인 결과 처리
-firebaseAuth.getRedirectResult().then(function(result) {
+firebaseAuth.getRedirectResult().then(async function(result) {
   if (!result || !result.user) return;
   const email = result.user.email.toLowerCase();
+  // GAS 로드가 완료될 때까지 대기 (리다이렉트 직후엔 googleAccounts가 비어있을 수 있음)
+  if (Object.keys(state.googleAccounts).length === 0 && state.settings && state.settings.gasUrl) {
+    try { await autoLoadFromGas(); } catch(e) { console.warn('GAS load error in redirect:', e); }
+  }
   const hakbeon = state.googleAccounts[email] || state.googleAccounts[email.split('@')[0]];
   if (!hakbeon) {
     const cnt = Object.keys(state.googleAccounts).length;
