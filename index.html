@@ -1433,6 +1433,7 @@
     <div style="background:linear-gradient(135deg,#064e3b,#059669);color:white;border-radius:var(--radius);padding:20px 24px;box-shadow:var(--shadow-lg);">
       <div style="font-size:22px;font-weight:800;margin-bottom:4px;" id="teacher-dash-title">X반 교사 대시보드</div>
       <div style="font-size:14px;opacity:0.85;" id="teacher-dash-meta"></div>
+      <div id="teacher-exam-tabs" style="display:none;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
       <div id="teacher-student-link-wrap" style="display:none;margin-top:14px;background:rgba(255,255,255,0.15);border-radius:8px;padding:12px 14px;">
         <div style="font-size:12px;margin-bottom:6px;opacity:0.9;">👤 학생용 링크 — 우리 반 학생들에게 공유</div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -2145,6 +2146,9 @@ function switchStudentExam(examName) {
     showToast('이 시험에 해당 학생 데이터가 없습니다.', 'error');
     return;
   }
+  // 배지 업데이트
+  const badge = document.getElementById('dash-exam-badge');
+  if (badge) badge.textContent = state.examInfo.year + '학년도 ' + state.examInfo.exam + ' 모의고사';
   renderScoreTable(state.currentStudent);
   fetchAllGradeData(state.currentStudent);
   const trendTab = document.getElementById('tab-성적추이');
@@ -2388,11 +2392,43 @@ function handleTeacherLogout() {
   showSection('home');
 }
 
+function switchTeacherExam(examName) {
+  if (examName === state.currentExam) return;
+  state.currentExam = examName;
+  loadExamToState(examName);
+  updateTeacherDashMeta();
+  renderTeacherExamTabs();
+  renderTeacherClassStats();
+  renderTeacherStudentTable();
+}
+
+function renderTeacherExamTabs() {
+  const area = document.getElementById('teacher-exam-tabs');
+  if (!area) return;
+  const names = Object.keys(state.exams);
+  if (names.length <= 1) { area.style.display = 'none'; return; }
+  area.style.display = 'flex';
+  area.innerHTML = names.map(function(name) {
+    const active = name === state.currentExam;
+    return '<button onclick="switchTeacherExam(\'' + name + '\')"' +
+      ' style="padding:5px 14px;border-radius:20px;cursor:pointer;color:white;font-size:13px;' +
+      'border:1.5px solid ' + (active ? 'white' : 'rgba(255,255,255,0.5)') + ';' +
+      'background:' + (active ? 'rgba(255,255,255,0.25)' : 'transparent') + ';' +
+      'font-weight:' + (active ? '700' : '400') + ';">' + name + '</button>';
+  }).join('');
+}
+
+function updateTeacherDashMeta() {
+  const t = state.currentTeacher; if (!t) return;
+  const titleEl = document.getElementById('teacher-dash-title');
+  const metaEl  = document.getElementById('teacher-dash-meta');
+  if (titleEl) titleEl.textContent = t.classNum + '반 담임 교사';
+  if (metaEl)  metaEl.textContent  = (t.name ? t.name + ' 선생님 • ' : '') + state.examInfo.year + '학년도 ' + state.examInfo.exam + ' 모의고사';
+}
+
 function showTeacherDash() {
   if (!state.currentTeacher) return;
-  const t = state.currentTeacher;
-  document.getElementById('teacher-dash-title').textContent = `${t.classNum}반 담임 교사`;
-  document.getElementById('teacher-dash-meta').textContent = `${t.name ? t.name + ' 선생님 • ' : ''}${state.examInfo.year}학년도 ${state.examInfo.exam} 모의고사`;
+  updateTeacherDashMeta();
   // 학생용 링크 표시
   const linkWrap = document.getElementById('teacher-student-link-wrap');
   const studentInput = document.getElementById('teacher-student-link-input');
@@ -2401,6 +2437,7 @@ function showTeacherDash() {
     studentInput.value = `${base}?gas=${encodeURIComponent(state.settings.gasUrl)}`;
     linkWrap.style.display = 'block';
   }
+  renderTeacherExamTabs();
   renderTeacherClassStats();
   renderTeacherStudentTable();
   showSection('teacher-dash');
