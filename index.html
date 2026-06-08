@@ -1694,6 +1694,29 @@ const firebaseAuth = firebase.auth();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
+// 모바일 리다이렉트 로그인 결과 처리
+firebaseAuth.getRedirectResult().then(function(result) {
+  if (!result || !result.user) return;
+  const email = result.user.email.toLowerCase();
+  const hakbeon = state.googleAccounts[email] || state.googleAccounts[email.split('@')[0]];
+  if (!hakbeon) {
+    const cnt = Object.keys(state.googleAccounts).length;
+    showToast('미등록 계정: ' + email + ' | 등록수: ' + cnt + '개', 'error');
+    firebaseAuth.signOut();
+    return;
+  }
+  const code = hakbeonToCode(hakbeon);
+  const student = findStudentForLogin(code);
+  if (!student) { showToast('학생 데이터를 찾을 수 없습니다.', 'error'); firebaseAuth.signOut(); return; }
+  state.currentStudent = student;
+  state.isTeacherPreview = false;
+  state.isParentView = false;
+  showDashboard();
+  showToast(student.name + ' 학생, 환영합니다!', 'success');
+}).catch(function(e) {
+  if (e.code !== 'auth/popup-closed-by-user') console.warn('Redirect login error:', e);
+});
+
 // 학생 로그인용: 가채점/공식 두 모드 모두 탐색 (공식 우선), 반+번호 폴백 매칭 포함
 function findStudentForLogin(code) {
   const exam = state.currentExam && state.exams[state.currentExam];
@@ -1742,6 +1765,11 @@ async function handleGoogleLogin() {
     return;
   }
   try {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      await firebaseAuth.signInWithRedirect(googleProvider);
+      return;
+    }
     const result = await firebaseAuth.signInWithPopup(googleProvider);
     const email = result.user.email.toLowerCase();
     // 구글 계정 → 학번 매핑
