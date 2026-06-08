@@ -2035,9 +2035,8 @@ function loadExamToState(examName, mode) {
   state.defaultPassword= exam.defaultPassword    || '000000';
   state.birthdateMode  = exam.birthdateMode      || 'default';
   state.examInfo       = modeData.examInfo       || { year: '2026', grade: '1', exam: examName };
-  if (exam.gradeCuts && Object.keys(exam.gradeCuts).length > 0) {
-    state.customCuts = { ...exam.gradeCuts };
-  }
+  // 시험 전환 시 항상 해당 시험의 등급컷으로 교체 (없으면 빈 객체 — 이전 시험 등급컷 유지 방지)
+  state.customCuts = (exam.gradeCuts && Object.keys(exam.gradeCuts).length > 0) ? { ...exam.gradeCuts } : {};
 }
 
 function saveCurrentToExam() {
