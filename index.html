@@ -1843,11 +1843,28 @@ window.addEventListener('load', () => {
     state.settings.gasUrl = decodeURIComponent(gasParam);
     saveToStorage();
   }
-  // GAS URL이 있으면 자동으로 데이터 불러오기
+  // GAS URL이 있으면 자동으로 데이터 불러오기 (로드 완료 전까지 로그인 버튼 비활성화)
   if (state.settings.gasUrl) {
     const el = document.getElementById('login-gas-load');
     if (el) el.style.display = 'block';
-    autoLoadFromGas();
+    const loginBtn = document.getElementById('google-login-btn');
+    if (loginBtn) {
+      loginBtn.disabled = true;
+      loginBtn.style.opacity = '0.5';
+      loginBtn.style.cursor = 'not-allowed';
+      loginBtn.title = '데이터 로딩 중...';
+      const origText = loginBtn.innerHTML;
+      loginBtn.innerHTML = loginBtn.innerHTML.replace('구글 계정으로 로그인', '⏳ 데이터 로딩 중...');
+    }
+    autoLoadFromGas().finally(() => {
+      if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.style.opacity = '';
+        loginBtn.style.cursor = '';
+        loginBtn.title = '';
+        loginBtn.innerHTML = loginBtn.innerHTML.replace('⏳ 데이터 로딩 중...', '구글 계정으로 로그인');
+      }
+    });
   }
   // ?gas= 링크로 접속한 경우 → role에 따라 버튼 표시 제어
   if (gasParam) {
