@@ -1767,8 +1767,10 @@ async function handleGoogleLogin() {
     return;
   }
   try {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) {
+    // iOS Safari는 signInWithRedirect가 ITP로 인해 결과를 잃어버림 → popup 사용
+    // Android만 redirect 사용 (popup이 막혀있음)
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    if (isAndroid) {
       await firebaseAuth.signInWithRedirect(googleProvider);
       return;
     }
