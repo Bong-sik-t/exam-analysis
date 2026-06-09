@@ -1694,32 +1694,30 @@ const firebaseAuth = firebase.auth();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// 모바일 리다이렉트 로그인 결과 처리
-firebaseAuth.getRedirectResult().then(async function(result) {
-  if (!result || !result.user) return;
-  const email = result.user.email.toLowerCase();
-  // GAS 로드가 완료될 때까지 대기 (리다이렉트 직후엔 googleAccounts가 비어있을 수 있음)
-  if (Object.keys(state.googleAccounts).length === 0 && state.settings && state.settings.gasUrl) {
-    try { await autoLoadFromGas(); } catch(e) { console.warn('GAS load error in redirect:', e); }
-  }
-  const hakbeon = state.googleAccounts[email] || state.googleAccounts[email.split('@')[0]];
-  if (!hakbeon) {
-    const cnt = Object.keys(state.googleAccounts).length;
-    showToast('미등록 계정: ' + email + ' | 등록수: ' + cnt + '개', 'error');
-    firebaseAuth.signOut();
-    return;
-  }
-  const code = hakbeonToCode(hakbeon);
-  const student = findStudentForLogin(code);
-  if (!student) { showToast('학생 데이터를 찾을 수 없습니다.', 'error'); firebaseAuth.signOut(); return; }
-  state.currentStudent = student;
-  state.isTeacherPreview = false;
-  state.isParentView = false;
-  showDashboard();
-  showToast(student.name + ' 학생, 환영합니다!', 'success');
-}).catch(function(e) {
-  if (e.code !== 'auth/popup-closed-by-user') console.warn('Redirect login error:', e);
-});
+// 모바일 리다이렉트 로그인 결과 처리 - window load 후 handleRedirectResult() 에서 실행
+function handleRedirectResult() {
+  firebaseAuth.getRedirectResult().then(async function(result) {
+    if (!result || !result.user) return;
+    const email = result.user.email.toLowerCase();
+    const hakbeon = state.googleAccounts[email] || state.googleAccounts[email.split('@')[0]];
+    if (!hakbeon) {
+      const cnt = Object.keys(state.googleAccounts).length;
+      showToast('미등록 계정: ' + email + ' | 등록수: ' + cnt + '개', 'error');
+      firebaseAuth.signOut();
+      return;
+    }
+    const code = hakbeonToCode(hakbeon);
+    const student = findStudentForLogin(code);
+    if (!student) { showToast('학생 데이터를 찾을 수 없습니다.', 'error'); firebaseAuth.signOut(); return; }
+    state.currentStudent = student;
+    state.isTeacherPreview = false;
+    state.isParentView = false;
+    showDashboard();
+    showToast(student.name + ' 학생, 환영합니다!', 'success');
+  }).catch(function(e) {
+    if (e.code !== 'auth/popup-closed-by-user') console.warn('Redirect login error:', e);
+  });
+}
 
 // 학생 로그인용: 가채점/공식 두 모드 모두 탐색 (공식 우선), 반+번호 폴백 매칭 포함
 function findStudentForLogin(code) {
@@ -1913,7 +1911,12 @@ window.addEventListener('load', () => {
         loginBtn.title = '';
         loginBtn.innerHTML = loginBtn.innerHTML.replace('⏳ 데이터 로딩 중...', '구글 계정으로 로그인');
       }
+      // GAS 로드 완료 후 리다이렉트 로그인 결과 처리 (모바일용)
+      handleRedirectResult();
     });
+  } else {
+    // GAS URL이 없어도 리다이렉트 결과는 처리해야 함
+    handleRedirectResult();
   }
   // ?gas= 링크로 접속한 경우 → role에 따라 버튼 표시 제어
   if (gasParam) {
