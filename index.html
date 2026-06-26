@@ -2745,16 +2745,20 @@ function diagExcel(file) {
         const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-        let firstDataRow = -1, col3 = '', col4 = '';
+        let firstDataRow = -1;
         for (let i = 0; i < Math.min(15, rows.length); i++) {
           const hb = parseInt(rows[i]?.[3]);
-          const nm = String(rows[i]?.[4] || '').trim();
-          if (hb >= 10101 && hb <= 19999) { firstDataRow = i; col3 = String(rows[i][3]); col4 = nm; break; }
+          if (hb >= 10101 && hb <= 19999) { firstDataRow = i; break; }
         }
-        resolve({ rows: rows.length, firstDataRow, col3, col4 });
-      } catch(err) { resolve({ rows: 0, firstDataRow: -1, col3: '읽기실패:'+err.message, col4: '' }); }
+        const r = firstDataRow >= 0 ? rows[firstDataRow] : [];
+        // 헤더 행 (row index 3 또는 4에서 열 이름 추출)
+        const hdr3 = rows[3] || [];
+        const colDump = r.map((v,i) => `[${i}]${hdr3[i]||''}=${v}`).join(' | ');
+        console.log('[DIAG] 전체컬럼:', colDump);
+        resolve({ rows: rows.length, firstDataRow, col3: String(r[3]||''), col4: String(r[4]||''), colDump });
+      } catch(err) { resolve({ rows: 0, firstDataRow: -1, col3: '읽기실패:'+err.message, col4: '', colDump:'' }); }
     };
-    reader.onerror = () => resolve({ rows: 0, firstDataRow: -1, col3: '파일오류', col4: '' });
+    reader.onerror = () => resolve({ rows: 0, firstDataRow: -1, col3: '파일오류', col4: '', colDump:'' });
     reader.readAsArrayBuffer(file);
   });
 }
