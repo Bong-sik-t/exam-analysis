@@ -2632,9 +2632,15 @@ async function handleOfficialScorePdf(event) {
     const exam = state.exams[state.currentExam];
     if (!exam) throw new Error(`시험 데이터 없음: ${state.currentExam}`);
 
-    // ── 전체반 통합 엑셀 (열 C=반, D=번호 구조, 25열 이상) ────────────
+    // ── 전체반 통합 엑셀 ────────────
     if (files.length === 1 && /\.(xlsx|xls)$/i.test(files[0].name)) {
-      const students = await parseOfficialScoreAllClasses(files[0]);
+      // 진단: 첫 10행 × 첫 6열 미리보기
+      const diagInfo = await diagExcel(files[0]);
+      statusEl.textContent = `⏳ 분석 중... 행수:${diagInfo.rows} | 첫데이터행:${diagInfo.firstDataRow} | col3="${diagInfo.col3}" col4="${diagInfo.col4}"`;
+      // 새 형식(실채점 결과분석: 학번 col3, 성명 col4) 먼저 시도
+      let students = await parseRealScoreAnalysis(files[0]);
+      // 기존 형식(공식성적일람표: 학년 col1, 반 col2, 번호 col3) 시도
+      if (!students) students = await parseOfficialScoreAllClasses(files[0]);
       if (students && students.length > 0) {
         exam.공식 = {
           students,
@@ -2717,6 +2723,100 @@ async function handleOfficialScorePdf(event) {
 }
 
 // ── 전체반 통합 엑셀 파서 (모의고사 선택회차 자료 형식) ──────────
+// ── 진단용: 엑셀 구조 미리보기 ───────────────────────────────────────
+function diagExcel(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        let firstDataRow = -1, col3 = '', col4 = '';
+        for (let i = 0; i < Math.min(15, rows.length); i++) {
+          const hb = parseInt(rows[i]?.[3]);
+          const nm = String(rows[i]?.[4] || '').trim();
+          if (hb >= 10101 && hb <= 19999) { firstDataRow = i; col3 = String(rows[i][3]); col4 = nm; break; }
+        }
+        resolve({ rows: rows.length, firstDataRow, col3, col4 });
+      } catch(err) { resolve({ rows: 0, firstDataRow: -1, col3: '읽기실패:'+err.message, col4: '' }); }
+    };
+    reader.onerror = () => resolve({ rows: 0, firstDataRow: -1, col3: '파일오류', col4: '' });
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ── 실채점 결과분석 형식 파서 ──────────────────────────────────────
+// 형식: col0=연번 col1=학교코드 col2=시행월 col3=학번(5자리) col4=성명
+//       col5=국수탐전국백분위 col6~13=백분위(국수/국탐/수탐/담구합산 교내+석차)
+//       col14=표준점수총합 col15=전국석차 col16=국내백분위
+//       col17=우수담구영역 col18=우수담구백분위
+//       col19=국영수총점 col20=국어교내백분위 col21=수학교내백분위
+//       col22=영어교내백분위 col23=국영수백분위합 col24=국영수석차
+//       col25=한국사교내백분위 col26=사회교내백분위 col27=과학교내백분위
+//       col28=전과목백분위 col29=전과목석차
+// 데이터 시작: row index 5 (Excel 6행), 헤더 row3~4, 필터 row5
+function parseRealScoreAnalysis(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        // 형식 감지: col3=5자리 학번(10101~19999), col4=한글 이름
+        console.log('[실채점] 총 행 수:', rows.length);
+        // 데이터 시작 행 자동 탐지 (헤더/필터 행 수가 다를 수 있음)
+        let dataStart = -1;
+        for (let ri = 2; ri < Math.min(10, rows.length); ri++) {
+          const hb = parseInt(rows[ri]?.[3]);
+          const nm = String(rows[ri]?.[4] || '').trim();
+          if (hb >= 10101 && hb <= 19999 && /^[가-힣]{2,5}$/.test(nm)) {
+            dataStart = ri; break;
+          }
+        }
+        console.log('[실채점] dataStart:', dataStart, '| col3~4 샘플:', rows[dataStart]?.[3], rows[dataStart]?.[4]);
+        if (dataStart < 0) { resolve(null); return; }
+
+        const n = (r, i) => parseFloat(r[i]) || 0;
+        const students = [];
+
+        for (let ri = dataStart; ri < rows.length; ri++) {
+          const r = rows[ri];
+          const hb = parseInt(r[3]);
+          if (isNaN(hb) || hb < 10101 || hb > 19999) continue;
+          const name = String(r[4] || '').trim();
+          if (!name) continue;
+
+          const grade = Math.floor(hb / 10000);
+          const cls   = Math.floor((hb % 10000) / 100);
+          const num   = hb % 100;
+          const code  = String(hb).padStart(5, '0');
+
+          students.push({
+            code, name,
+            grade: String(grade), class: String(cls), number: String(num),
+            total: n(r, 14),  // 표준점수 총합 (랭킹용)
+            avg: 0, rank: parseInt(r[29]) || 0,
+            scores:    { 국어: 0, 수학: 0, 영어: 0, 한국사: 0, 사탐: 0, 과탐: 0 },
+            표준점수: { 국어: null, 수학: null, 영어: null, 한국사: null, 사탐: null, 과탐: null },
+            백분위:   { 국어: n(r,20), 수학: n(r,21), 영어: n(r,22), 한국사: n(r,25), 사탐: n(r,26), 과탐: n(r,27) },
+            공식등급: { 국어: 0, 수학: 0, 영어: 0, 한국사: 0, 사탐: 0, 과탐: 0 },
+            학교석차: { 전과목: parseInt(r[29]) || 0 },
+            국수탐백분위: n(r, 5),
+            우수담구: { 영역: String(r[17] || ''), 백분위: n(r, 18) },
+          });
+        }
+
+        resolve(students.length > 0 ? students : null);
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 // 열: A학년도 B학년 C반 D번호 E이름
 //     F한국사원점수 G한국사등급
 //     H국어선택 I국어원점수 J국어표준 K국어백분위 L국어등급
