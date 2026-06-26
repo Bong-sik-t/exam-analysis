@@ -2811,22 +2811,60 @@ function parseRealScoreAnalysis(file) {
           const num   = hb % 100;
           const code  = String(hb).padStart(5, '0');
 
+          // 전국 백분위 (교과목별)
           const 백분위map = {
-            국어: n(r,20), 수학: n(r,21), 영어: n(r,22),
-            한국사: n(r,25), 사탐: n(r,26), 과탐: n(r,27)
+            국어:   n(r, 12) || null,
+            수학:   n(r, 18) || null,
+            영어:   null,           // 영어 절대평가 - 전국백분위 없음
+            한국사: n(r, 8)  || null,
+            사탐:   n(r, 28) || null,
+            과탐:   n(r, 34) || null,
+          };
+          // 교내 백분위 (cols 77~85)
+          const 교내백분위 = {
+            국어:   n(r, 77) || null,
+            수학:   n(r, 78) || null,
+            영어:   n(r, 79) || null,
+            한국사: n(r, 83) || null,
+            사탐:   n(r, 84) || null,
+            과탐:   n(r, 85) || null,
+          };
+          const 등급map = {
+            국어:   parseInt(r[13]) || 0,
+            수학:   parseInt(r[19]) || 0,
+            영어:   parseInt(r[22]) || 0,
+            한국사: parseInt(r[6])  || 0,
+            사탐:   parseInt(r[29]) || 0,
+            과탐:   parseInt(r[35]) || 0,
           };
           students.push({
             code, name,
             grade: String(grade), class: String(cls), number: String(num),
-            total: n(r, 14),
-            avg: 0, rank: parseInt(r[29]) || 0,
-            scores:    { 국어: null, 수학: null, 영어: null, 한국사: null, 사탐: null, 과탐: null },
-            표준점수: { 국어: null, 수학: null, 영어: null, 한국사: null, 사탐: null, 과탐: null },
+            total: n(r, 37),   // 국수탐 원점 합계 (석차 산출용)
+            avg: 0, rank: parseInt(r[38]) || 0,
+            scores: {
+              국어:   n(r, 10) || null,
+              수학:   n(r, 16) || null,
+              영어:   n(r, 21) || null,
+              한국사: n(r, 5)  || null,
+              사탐:   n(r, 26) || null,
+              과탐:   n(r, 32) || null,
+            },
+            표준점수: {
+              국어:   n(r, 11) || null,
+              수학:   n(r, 17) || null,
+              영어:   null,
+              한국사: null,
+              사탐:   n(r, 27) || null,
+              과탐:   n(r, 33) || null,
+            },
             백분위:   백분위map,
-            공식등급: Object.fromEntries(Object.entries(백분위map).map(([k,v]) => [k, v > 0 ? pctToGrade(v) : 0])),
-            학교석차: { 전과목: parseInt(r[29]) || 0 },
-            국수탐백분위: n(r, 5),
-            우수담구: { 영역: String(r[17] || ''), 백분위: n(r, 18) },
+            교내백분위: 교내백분위,
+            공식등급: 등급map,
+            학교석차: { 전과목: parseInt(r[38]) || 0 },
+            국수탐백분위: n(r, 48),
+            우수담구: { 영역: String(r[74] || ''), 백분위: n(r, 75) },
+            선택과목: { 국어: String(r[9]||''), 수학: String(r[15]||''), 사탐: String(r[25]||''), 과탐: String(r[31]||'') },
           });
         }
 
