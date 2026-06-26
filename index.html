@@ -2723,6 +2723,19 @@ async function handleOfficialScorePdf(event) {
 }
 
 // ── 전체반 통합 엑셀 파서 (모의고사 선택회차 자료 형식) ──────────
+// 백분위 → 등급 변환 (수능 기준: 1등급 상위4%, 2등급 상위11% ...)
+function pctToGrade(pct) {
+  if (pct >= 97) return 1;
+  if (pct >= 90) return 2;
+  if (pct >= 77) return 3;
+  if (pct >= 60) return 4;
+  if (pct >= 40) return 5;
+  if (pct >= 23) return 6;
+  if (pct >= 11) return 7;
+  if (pct >=  4) return 8;
+  return 9;
+}
+
 // ── 진단용: 엑셀 구조 미리보기 ───────────────────────────────────────
 function diagExcel(file) {
   return new Promise(resolve => {
@@ -2794,15 +2807,19 @@ function parseRealScoreAnalysis(file) {
           const num   = hb % 100;
           const code  = String(hb).padStart(5, '0');
 
+          const 백분위map = {
+            국어: n(r,20), 수학: n(r,21), 영어: n(r,22),
+            한국사: n(r,25), 사탐: n(r,26), 과탐: n(r,27)
+          };
           students.push({
             code, name,
             grade: String(grade), class: String(cls), number: String(num),
-            total: n(r, 14),  // 표준점수 총합 (랭킹용)
+            total: n(r, 14),
             avg: 0, rank: parseInt(r[29]) || 0,
-            scores:    { 국어: 0, 수학: 0, 영어: 0, 한국사: 0, 사탐: 0, 과탐: 0 },
+            scores:    { 국어: null, 수학: null, 영어: null, 한국사: null, 사탐: null, 과탐: null },
             표준점수: { 국어: null, 수학: null, 영어: null, 한국사: null, 사탐: null, 과탐: null },
-            백분위:   { 국어: n(r,20), 수학: n(r,21), 영어: n(r,22), 한국사: n(r,25), 사탐: n(r,26), 과탐: n(r,27) },
-            공식등급: { 국어: 0, 수학: 0, 영어: 0, 한국사: 0, 사탐: 0, 과탐: 0 },
+            백분위:   백분위map,
+            공식등급: Object.fromEntries(Object.entries(백분위map).map(([k,v]) => [k, v > 0 ? pctToGrade(v) : 0])),
             학교석차: { 전과목: parseInt(r[29]) || 0 },
             국수탐백분위: n(r, 5),
             우수담구: { 영역: String(r[17] || ''), 백분위: n(r, 18) },
