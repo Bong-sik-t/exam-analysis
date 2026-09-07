@@ -2319,6 +2319,7 @@ function saveOcrGradeCuts() {
     state.exams[state.currentExam].gradeCuts[subject] = cuts;
   }
   saveToStorage();
+  autoSaveToGas();
   document.getElementById('ocr-confirm-area').style.display = 'none';
   document.getElementById('ocr-status').textContent = '✅ ' + subject + ' 등급컷 저장됨';
   renderCurrentGradeCuts();
@@ -2367,6 +2368,7 @@ function saveManualCuts() {
     saved++;
   });
   saveToStorage();
+  autoSaveToGas();
   renderCurrentGradeCuts();
   const st = document.getElementById('manual-cut-status');
   if (st) { st.textContent = `✅ ${saved}개 과목 저장됨`; setTimeout(() => { st.textContent = ''; }, 2500); }
