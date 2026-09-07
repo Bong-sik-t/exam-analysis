@@ -1696,8 +1696,18 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // 모바일 리다이렉트 로그인 결과 처리 - window load 후 handleRedirectResult() 에서 실행
 function handleRedirectResult() {
+  const wasPending = sessionStorage.getItem('gLoginPending') === '1';
+  sessionStorage.removeItem('gLoginPending');
   firebaseAuth.getRedirectResult().then(async function(result) {
-    if (!result || !result.user) return;
+    if (!result || !result.user) {
+      // 리다이렉트로 구글 로그인을 시도했는데 결과가 비어있음 → 대부분 브라우저의
+      // 서드파티 저장소 차단(삼성인터넷/일부 안드로이드 크롬)으로 로그인 결과를 잃어버린 경우
+      if (wasPending) {
+        showToast('로그인이 완료되지 않았습니다. 기본 크롬 브라우저로 다시 시도하거나 PC로 로그인해보세요.', 'error');
+        console.warn('[login debug] redirect result empty after pending google login');
+      }
+      return;
+    }
     const email = result.user.email.toLowerCase();
     const hakbeon = state.googleAccounts[email] || state.googleAccounts[email.split('@')[0]];
     if (!hakbeon) {
@@ -1715,7 +1725,10 @@ function handleRedirectResult() {
     showDashboard();
     showToast(student.name + ' 학생, 환영합니다!', 'success');
   }).catch(function(e) {
-    if (e.code !== 'auth/popup-closed-by-user') console.warn('Redirect login error:', e);
+    console.warn('Redirect login error:', e);
+    if (wasPending && e.code !== 'auth/popup-closed-by-user') {
+      showToast('구글 로그인 실패: ' + (e.code || e.message), 'error');
+    }
   });
 }
 
@@ -1771,6 +1784,7 @@ async function handleGoogleLogin() {
     // Android만 redirect 사용 (popup이 막혀있음)
     const isAndroid = /Android/i.test(navigator.userAgent);
     if (isAndroid) {
+      sessionStorage.setItem('gLoginPending', '1');
       await firebaseAuth.signInWithRedirect(googleProvider);
       return;
     }
@@ -1799,8 +1813,9 @@ async function handleGoogleLogin() {
     showDashboard();
     showToast(`${student.name} 학생, 환영합니다!`, 'success');
   } catch(e) {
+    console.warn('[login debug] popup login error:', e);
     if (e.code !== 'auth/popup-closed-by-user') {
-      showToast('구글 로그인 실패: ' + e.message, 'error');
+      showToast('구글 로그인 실패: ' + (e.code || e.message), 'error');
     }
   }
 }
@@ -2558,8 +2573,6 @@ function teacherViewStudent(code) {
 
 function showLogin() {
   showSection('login');
-  document.getElementById('login-code').value = '';
-  document.getElementById('login-pw').value = '';
   document.getElementById('login-error').classList.remove('show');
 }
 
