@@ -2104,6 +2104,8 @@ function loadExamToState(examName, mode) {
   state.examInfo       = modeData.examInfo       || { year: '2026', grade: '1', exam: examName };
   // 시험 전환 시 항상 해당 시험의 등급컷으로 교체 (없으면 빈 객체 — 이전 시험 등급컷 유지 방지)
   state.customCuts = (exam.gradeCuts && Object.keys(exam.gradeCuts).length > 0) ? { ...exam.gradeCuts } : {};
+  // 시험별 구분 없이 과목명으로만 캐시되던 자동 조회 등급컷도 함께 비움 (다른 시험 값이 새어 들어오는 것 방지)
+  state.gradeData = {};
 }
 
 function saveCurrentToExam() {
@@ -2385,8 +2387,11 @@ function renderCurrentGradeCuts() {
 }
 
 function getEffectiveCuts(subject) {
-  if (state.gradeData[subject] && state.gradeData[subject].cuts) return state.gradeData[subject].cuts;
+  // 시험(월)별로 저장되는 수동 등급컷(customCuts)이 항상 최우선 —
+  // gradeData는 시험 구분 없이 과목명으로만 캐시되는 값이라, 이걸 먼저 보면
+  // 다른 시험(예: 6월)에서 불러온 값이 지금 보는 시험(예: 9월)에 그대로 남아 보이는 문제가 있었음
   if (state.customCuts && state.customCuts[subject]) return state.customCuts[subject];
+  if (state.gradeData[subject] && state.gradeData[subject].cuts) return state.gradeData[subject].cuts;
   return DEFAULT_CUTS[subject] || [];
 }
 
