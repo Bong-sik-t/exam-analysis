@@ -2319,7 +2319,7 @@ function saveOcrGradeCuts() {
     state.exams[state.currentExam].gradeCuts[subject] = cuts;
   }
   saveToStorage();
-  autoSaveToGas();
+  saveGradeCutsToGas();
   document.getElementById('ocr-confirm-area').style.display = 'none';
   document.getElementById('ocr-status').textContent = '✅ ' + subject + ' 등급컷 저장됨';
   renderCurrentGradeCuts();
@@ -2368,7 +2368,7 @@ function saveManualCuts() {
     saved++;
   });
   saveToStorage();
-  autoSaveToGas();
+  saveGradeCutsToGas();
   renderCurrentGradeCuts();
   const st = document.getElementById('manual-cut-status');
   if (st) { st.textContent = `✅ ${saved}개 과목 저장됨`; setTimeout(() => { st.textContent = ''; }, 2500); }
@@ -4437,6 +4437,55 @@ async function autoSaveToGas() {
   } catch(e) {
     showToast('⚠️ 구글시트 자동 저장 실패 — 수동으로 저장해주세요', 'error');
     console.warn('autoSaveToGas error:', e);
+  }
+}
+
+// 등급컷 저장 전용: 저장 직전 구글시트에서 최신 데이터를 다시 받아와
+// "지금 이 시험의 등급컷"만 갱신해서 되돌려보낸다. 다른 기기/탭이 그
+// 사이에 저장한 다른 시험이나 학생 데이터를 통째로 덮어써버리는(마지막
+// 저장이 항상 이기는) 문제를 피하기 위함 — 시간이 좀 지난 뒤 다시
+// 예전 값으로 돌아가 보이던 문제의 원인이었다.
+async function saveGradeCutsToGas() {
+  const url = state.settings.gasUrl;
+  if (!url) return;
+  try {
+    const resp = await fetch(url + '?action=getStudents', { mode: 'cors' });
+    const json = await resp.json();
+    const freshExams = (json.exams && Object.keys(json.exams).length > 0) ? json.exams : state.exams;
+    if (state.currentExam) {
+      if (!freshExams[state.currentExam]) freshExams[state.currentExam] = state.exams[state.currentExam] || {};
+      freshExams[state.currentExam].gradeCuts = { ...state.customCuts };
+    }
+    state.exams = freshExams; // 로컬 상태도 최신 서버 데이터 기준으로 맞춰줌
+    const payload = {
+      action: 'saveStudents',
+      students: json.students || state.students,
+      correctAnswers: json.correctAnswers || state.correctAnswers,
+      studentAnswers: json.studentAnswers || state.studentAnswers,
+      birthdates: json.birthdates || state.birthdates,
+      defaultPassword: json.defaultPassword || state.defaultPassword,
+      birthdateMode: json.birthdateMode || state.birthdateMode,
+      examInfo: json.examInfo || state.examInfo,
+      teachers: json.teachers || state.teachers,
+      numClasses: json.numClasses || state.numClasses,
+      settings: { subjectPdfUrls: state.settings.subjectPdfUrls, pdfPageConfig: state.settings.pdfPageConfig },
+      exams: freshExams,
+      currentExam: state.currentExam,
+    };
+    const saveResp = await fetch(url, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload),
+    });
+    const saveJson = await saveResp.json();
+    if (saveJson.success) {
+      showToast('☁ 구글시트 자동 저장 완료', 'success');
+    } else {
+      showToast('⚠️ 구글시트 자동 저장 실패 — 수동으로 저장해주세요', 'error');
+    }
+  } catch(e) {
+    showToast('⚠️ 구글시트 자동 저장 실패 — 수동으로 저장해주세요', 'error');
+    console.warn('saveGradeCutsToGas error:', e);
   }
 }
 
