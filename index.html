@@ -10,6 +10,7 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --primary: #3B82F6;
@@ -1693,6 +1694,8 @@ firebase.initializeApp(firebaseConfig);
 const firebaseAuth = firebase.auth();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+// Firestore — 등급컷부터 시범 이전 중 (구글시트 통째 덮어쓰기 방식의 동시저장 충돌 문제 해결)
+const fsDb = firebase.firestore();
 
 // 모바일 리다이렉트 로그인 결과 처리 - window load 후 handleRedirectResult() 에서 실행
 function handleRedirectResult() {
@@ -2050,6 +2053,7 @@ function selectAdminExam(name) {
   if (manualArea && manualArea.style.display !== 'none') renderManualCutGrid();
   loadAllPdfsFromIDB();
   saveToStorage();
+  refreshGradeCutsFromFirestore();
 }
 
 function deleteExam(name, e) {
@@ -2202,6 +2206,7 @@ function switchStudentExam(examName) {
   if (badge) badge.textContent = state.examInfo.year + '학년도 ' + state.examInfo.exam + ' 모의고사';
   renderScoreTable(state.currentStudent);
   fetchAllGradeData(state.currentStudent);
+  refreshGradeCutsFromFirestore();
   const trendTab = document.getElementById('tab-성적추이');
   if (trendTab && trendTab.classList.contains('active')) {
     renderTrendChart(state.currentStudent);
@@ -2320,6 +2325,7 @@ function saveOcrGradeCuts() {
   }
   saveToStorage();
   saveGradeCutsToGas();
+  saveGradeCutToFirestore(state.currentExam, subject, cuts);
   document.getElementById('ocr-confirm-area').style.display = 'none';
   document.getElementById('ocr-status').textContent = '✅ ' + subject + ' 등급컷 저장됨';
   renderCurrentGradeCuts();
@@ -2354,6 +2360,7 @@ function renderManualCutGrid() {
 
 function saveManualCuts() {
   let saved = 0;
+  const changedSubjects = [];
   SUBJECTS.forEach(subj => {
     const input = document.getElementById('manual-cut-' + subj);
     if (!input || !input.value.trim()) return;
@@ -2365,10 +2372,12 @@ function saveManualCuts() {
       if (!state.exams[state.currentExam].gradeCuts) state.exams[state.currentExam].gradeCuts = {};
       state.exams[state.currentExam].gradeCuts[subj] = cuts;
     }
+    changedSubjects.push(subj);
     saved++;
   });
   saveToStorage();
   saveGradeCutsToGas();
+  changedSubjects.forEach(subj => saveGradeCutToFirestore(state.currentExam, subj, state.customCuts[subj]));
   renderCurrentGradeCuts();
   const st = document.getElementById('manual-cut-status');
   if (st) { st.textContent = `✅ ${saved}개 과목 저장됨`; setTimeout(() => { st.textContent = ''; }, 2500); }
@@ -2386,6 +2395,51 @@ function renderCurrentGradeCuts() {
       '<br><span style="color:var(--gray-500);">1등: ' + (cuts[0] || '?') + '</span>' +
       '</div>';
   }).join('');
+}
+
+// ============================================================
+// FIRESTORE — 등급컷 시범 이전
+// (구글시트 방식은 저장할 때마다 전체 데이터를 통째로 덮어써서, 다른 탭/
+//  기기가 나중에 저장하면 방금 한 저장을 지워버리는 문제가 있었음.
+//  Firestore는 "이 시험의 이 과목 하나"만 정확히 갱신하므로 그럴 일이 없음.
+//  전환 기간 동안 구글시트 저장은 그대로 두고, Firestore를 우선 소스로 덧씌운다.)
+// ============================================================
+async function fetchGradeCutsFromFirestore(examName) {
+  if (!examName) return null;
+  try {
+    const snap = await fsDb.collection('gradeCuts').doc(examName).get();
+    return snap.exists ? (snap.data() || {}) : {};
+  } catch (e) {
+    console.warn('[Firestore] 등급컷 조회 실패:', e.message);
+    return null; // 조회 실패(오프라인 등) — 기존(구글시트) 값 유지
+  }
+}
+
+async function saveGradeCutToFirestore(examName, subject, cuts) {
+  if (!examName) return;
+  try {
+    await fsDb.collection('gradeCuts').doc(examName).set({ [subject]: cuts }, { merge: true });
+  } catch (e) {
+    console.warn('[Firestore] 등급컷 저장 실패:', e.message);
+    showToast('⚠️ Firestore 저장 실패 (구글시트에는 저장됐습니다): ' + e.message, 'error');
+  }
+}
+
+// 시험 전환/로그인 시 Firestore 최신 등급컷을 customCuts에 덧씌움
+async function refreshGradeCutsFromFirestore() {
+  const examName = state.currentExam;
+  const data = await fetchGradeCutsFromFirestore(examName);
+  if (data === null) return; // 조회 실패 — 아무것도 안 바꿈
+  if (examName !== state.currentExam) return; // 그 사이 다른 시험으로 넘어갔으면 무시
+  if (Object.keys(data).length > 0) {
+    state.customCuts = { ...state.customCuts, ...data };
+  }
+  // 관리자 화면 갱신 (해당 요소가 없으면 각 함수 내부에서 조용히 무시됨)
+  renderCurrentGradeCuts();
+  const manualArea = document.getElementById('manual-cut-area');
+  if (manualArea && manualArea.style.display !== 'none') renderManualCutGrid();
+  // 학생 대시보드 화면 갱신 (등급이 새 등급컷 기준으로 다시 계산되도록)
+  if (state.currentStudent) renderScoreTable(state.currentStudent);
 }
 
 function getEffectiveCuts(subject) {
@@ -2410,6 +2464,7 @@ function showAdminDash() {
   generateStudentLink(); // GAS URL 있으면 링크 바로 표시
   renderExamTabs();
   renderCurrentGradeCuts();
+  refreshGradeCutsFromFirestore();
 }
 // Keep showTeacher as alias
 function showTeacher() { showAdminDash(); }
@@ -3748,6 +3803,7 @@ function showDashboard() {
 
   // Fetch GAS data for charts/table
   fetchAllGradeData(s);
+  refreshGradeCutsFromFirestore();
 
   showSection('dashboard');
 }
